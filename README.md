@@ -20,20 +20,43 @@ Within each workspace:
 
 ## The teach skill
 
-The skill that drives these workspaces is vendored at
-[`.claude/skills/teach/`](.claude/skills/teach/) so it travels with the content.
+These workspaces are driven by the [`teach`](.claude/skills/teach/SKILL.md) skill by
+[Matt Pocock](https://github.com/mattpocock/skills/tree/main/skills/productivity/teach).
+A tracked mirror of the skill lives at [`.claude/skills/teach/`](.claude/skills/teach/) and is
+kept in sync with upstream automatically.
+
+### Auto-sync with upstream
+
+Each time you run `/teach` in this folder, a `PreToolUse` hook
+([`.claude/settings.json`](.claude/settings.json)) runs
+[`.claude/hooks/sync-teach-skill.mjs`](.claude/hooks/sync-teach-skill.mjs), which:
+
+1. Checks Matt's latest commit for the skill — one quick request; skips instantly if nothing changed.
+2. If upstream changed, downloads the files into the tracked mirror and records the commit in `.upstream-sha`.
+3. Copies the mirror into your live install at `~/.claude/skills/teach/` so `/teach` uses the current version.
+
+It is pull-only, offline-safe (never blocks `/teach`), and needs no auth — Matt's repo is public and
+the script runs on Node, which ships with Claude Code. Upstream updates appear as ordinary changes in
+`git status`; commit them alongside your learning progress. Run it by hand anytime with:
+
+```sh
+node .claude/hooks/sync-teach-skill.mjs
+```
+
+> Heads-up: upstream is the source of truth, so any local edits to the skill are overwritten on the next sync.
 
 ### Setting up on a new machine
 
 ```sh
-git clone git@github.com:eushaun/teach.git
+git clone https://github.com/eushaun/teach.git
 cd teach
 
-# Install the skill so /teach is available in Claude Code:
+# One-time: install the skill so the /teach command exists.
 #   Windows (PowerShell)
 Copy-Item -Recurse -Force .claude\skills\teach $env:USERPROFILE\.claude\skills\teach
 #   macOS / Linux
 cp -r .claude/skills/teach ~/.claude/skills/teach
 ```
 
-Then run `/teach <topic>` from inside this directory and commit the results.
+Then open this folder in Claude Code (accept the workspace-trust prompt so the hook can run) and use
+`/teach <topic>`. From then on the skill auto-syncs with upstream, and you commit your progress as you go.
