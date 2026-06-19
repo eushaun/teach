@@ -4,133 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lesson 1 — The Execution Model</title>
-<style>
-  :root{
-    --ink:#1a1a1a; --muted:#6b6b6b; --rule:#e4e0d8; --bg:#fdfcf9;
-    --accent:#9a3412; --accent-soft:#fbeae0; --code-bg:#f4f1ea;
-    --good:#1a7f37; --good-bg:#e7f4ea; --bad:#b42318; --bad-bg:#fbeae9;
-  }
-  *{box-sizing:border-box;}
-  html{font-size:17px;}
-  body{
-    margin:0; background:var(--bg); color:var(--ink);
-    font-family:"Iowan Old Style","Charter",Georgia,Cambria,"Times New Roman",serif;
-    line-height:1.58; -webkit-font-smoothing:antialiased;
-  }
-  .wrap{max-width:720px; margin:0 auto; padding:3.5rem 1.5rem 6rem;}
-  .sans{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;}
-
-  header{border-bottom:2px solid var(--ink); padding-bottom:1.1rem; margin-bottom:1.8rem;}
-  .kicker{font-family:ui-sans-serif,system-ui,sans-serif; text-transform:uppercase;
-    letter-spacing:.14em; font-size:.7rem; color:var(--accent); font-weight:700; margin:0 0 .5rem;}
-  h1{font-size:2.15rem; line-height:1.08; margin:0 0 .5rem; font-weight:600; letter-spacing:-.01em;}
-  .sub{color:var(--muted); font-size:1.05rem; margin:.3rem 0 0; font-style:italic;}
-
-  h2{font-size:1.32rem; margin:2.6rem 0 .6rem; font-weight:600; letter-spacing:-.01em;
-    display:flex; align-items:baseline; gap:.55rem;}
-  h2 .n{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.72rem; font-weight:700;
-    color:#fff; background:var(--accent); width:1.5rem; height:1.5rem; border-radius:50%;
-    display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;}
-  h3{font-size:1.02rem; margin:1.6rem 0 .3rem; font-weight:700;}
-  p{margin:.7rem 0;}
-
-  a{color:var(--accent);}
-  .xref{text-decoration:none; border-bottom:1px dotted var(--accent);}
-  sup a{text-decoration:none; font-weight:700; padding:0 .1em;}
-
-  code{font-family:"SF Mono",ui-monospace,"Cascadia Code",Consolas,monospace;
-    background:var(--code-bg); padding:.08em .35em; border-radius:4px; font-size:.83em;}
-  pre{background:var(--code-bg); border-radius:8px; padding:1rem 1.1rem; overflow-x:auto;
-    font-size:.82rem; line-height:1.5; border:1px solid var(--rule);}
-  pre code{background:none; padding:0; font-size:1em;}
-
-  .callout{background:var(--accent-soft); border-left:3px solid var(--accent);
-    padding:.9rem 1.1rem; border-radius:0 8px 8px 0; margin:1.4rem 0;}
-  .callout .lbl{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.66rem;
-    text-transform:uppercase; letter-spacing:.12em; font-weight:700; color:var(--accent);
-    display:block; margin-bottom:.3rem;}
-  .callout p{margin:.3rem 0;}
-
-  .keybox{border:1px solid var(--rule); border-radius:10px; padding:1rem 1.2rem; margin:1.2rem 0;
-    background:#fff;}
-  .keybox strong{color:var(--accent);}
-
-  /* mini cluster diagram */
-  .diagram{display:flex; gap:.8rem; align-items:stretch; margin:1.2rem 0; flex-wrap:wrap;}
-  .node{flex:1 1 0; min-width:150px; border:1px solid var(--rule); border-radius:10px;
-    padding:.8rem .9rem; background:#fff; font-family:ui-sans-serif,system-ui,sans-serif;}
-  .node .t{font-size:.66rem; text-transform:uppercase; letter-spacing:.1em; font-weight:700;
-    color:var(--accent); margin-bottom:.35rem;}
-  .node .d{font-size:.82rem; color:#333; line-height:1.4;}
-  .node.exec{background:#fbfaf6;}
-  .slots{display:flex; gap:.25rem; margin-top:.5rem;}
-  .slots span{flex:1; height:.55rem; border-radius:3px; background:var(--accent); opacity:.7;}
-
-  /* interactive */
-  .ex{border:1px solid var(--rule); border-radius:12px; padding:1.2rem 1.3rem; margin:1.3rem 0;
-    background:#fff;}
-  .ex .tasklbl{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.66rem;
-    text-transform:uppercase; letter-spacing:.12em; font-weight:700; color:var(--accent);}
-  .ex h3{margin:.2rem 0 .2rem;}
-  .ex .hint{color:var(--muted); font-size:.9rem; margin:.2rem 0 1rem;}
-
-  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:.7rem;}
-  .tile{border:1px solid var(--rule); border-radius:9px; padding:.6rem .7rem; background:#fdfcf9;}
-  .tile .op{font-family:"SF Mono",ui-monospace,Consolas,monospace; font-size:.82rem;
-    font-weight:700; margin-bottom:.45rem;}
-  .tile .btns{display:flex; gap:.35rem;}
-  .tile button{flex:1; font-family:ui-sans-serif,system-ui,sans-serif; font-size:.7rem;
-    font-weight:600; padding:.32rem 0; border:1px solid var(--rule); border-radius:6px;
-    background:#fff; cursor:pointer; color:#333; transition:.12s;}
-  .tile button:hover{border-color:var(--accent);}
-  .tile button.sel-good{background:var(--good-bg); border-color:var(--good); color:var(--good);}
-  .tile button.sel-bad{background:var(--bad-bg); border-color:var(--bad); color:var(--bad);}
-  .tile .fb{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.72rem; margin-top:.4rem;
-    min-height:1rem; color:var(--muted);}
-  .tile .fb.ok{color:var(--good);} .tile .fb.no{color:var(--bad);}
-
-  .score{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.82rem; font-weight:600;
-    margin-top:.9rem; color:var(--muted);}
-
-  /* pipeline picker */
-  .pipe{font-family:"SF Mono",ui-monospace,Consolas,monospace; font-size:.8rem; margin:.3rem 0;}
-  .pipe .line{display:block; padding:.45rem .7rem; border:1px solid transparent;
-    border-radius:7px; cursor:pointer; margin:.2rem 0; background:#fbfaf6; transition:.12s;}
-  .pipe .line:hover{border-color:var(--accent);}
-  .pipe .line.ok{background:var(--good-bg); border-color:var(--good);}
-  .pipe .line.no{background:var(--bad-bg); border-color:var(--bad);}
-  .pipe .cmt{color:var(--muted);}
-  .pipefb{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.85rem; margin-top:.7rem;
-    min-height:1.2rem;}
-  .pipefb.ok{color:var(--good);} .pipefb.no{color:var(--bad);}
-
-  /* reveal */
-  .choices{display:flex; gap:.5rem; flex-wrap:wrap; margin:.6rem 0;}
-  .choices button{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.85rem; font-weight:600;
-    padding:.45rem 1.1rem; border:1px solid var(--rule); border-radius:8px; background:#fff;
-    cursor:pointer; transition:.12s;}
-  .choices button:hover{border-color:var(--accent);}
-  .choices button.ok{background:var(--good-bg); border-color:var(--good); color:var(--good);}
-  .choices button.no{background:var(--bad-bg); border-color:var(--bad); color:var(--bad);}
-  .reveal{margin-top:.8rem; padding:.9rem 1.1rem; background:var(--code-bg); border-radius:8px;
-    font-size:.9rem; display:none;}
-  .reveal.show{display:block;}
-
-  .refs{margin-top:3rem; border-top:1px solid var(--rule); padding-top:1rem;
-    font-family:ui-sans-serif,system-ui,sans-serif; font-size:.8rem; color:var(--muted);}
-  .refs ol{margin:.5rem 0; padding-left:1.2rem;} .refs li{margin:.3rem 0;}
-  .nav{display:flex; justify-content:space-between; margin-top:2.4rem;
-    font-family:ui-sans-serif,system-ui,sans-serif; font-size:.85rem;}
-  .nav a{text-decoration:none; font-weight:600;}
-  .nav .next{color:var(--muted); cursor:default;}
-
-  @media print{
-    body{background:#fff;}
-    .ex button,.choices button{display:none;}
-    .reveal{display:block; border:1px solid var(--rule);}
-    a{color:var(--ink);}
-  }
-</style>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
 </head>
 <body>
 <div class="wrap">
@@ -237,56 +112,66 @@ across the network so rows with the same key meet. Operations that need this —
   Spark performance tuning.</p>
 </div>
 
-<!-- ============ PRACTICE ============ -->
+<!-- ============ PRACTICE (widgets from ../assets/quiz.js) ============ -->
 <h2><span class="n">4</span> Practice — make it stick</h2>
 <p class="sans" style="color:var(--muted); font-size:.9rem;">Retrieval beats re-reading. Answer
 from memory; you get feedback the instant you click.</p>
 
-<div class="ex" id="exA">
+<div class="ex">
   <span class="tasklbl">Exercise A · Retrieval</span>
   <h3>Lazy or eager? Tag each operation.</h3>
   <p class="hint">Transformation = lazy (builds the plan). Action = triggers a job.</p>
-  <div class="grid" id="gridA"></div>
-  <div class="score" id="scoreA">0 / 8 correct</div>
+  <div class="qz-classify" data-options="Transform|Action">
+    <div class="qz-item" data-op="filter()"     data-answer="Transform" data-why="Defines a new filtered DataFrame — lazy."></div>
+    <div class="qz-item" data-op="count()"      data-answer="Action"    data-why="Asks for a number → triggers a job."></div>
+    <div class="qz-item" data-op="select()"     data-answer="Transform" data-why="Projects columns — lazy, no execution."></div>
+    <div class="qz-item" data-op="write()"      data-answer="Action"    data-why="Writes output → triggers execution."></div>
+    <div class="qz-item" data-op="groupBy()"    data-answer="Transform" data-why="Lazy (and wide — it'll cause a shuffle when run)."></div>
+    <div class="qz-item" data-op="collect()"    data-answer="Action"    data-why="Pulls rows to the driver → triggers a job."></div>
+    <div class="qz-item" data-op="withColumn()" data-answer="Transform" data-why="Adds a derived column — lazy."></div>
+    <div class="qz-item" data-op="show()"       data-answer="Action"    data-why="Renders rows → triggers a job."></div>
+  </div>
 </div>
 
-<div class="ex" id="exB">
+<div class="ex">
   <span class="tasklbl">Exercise B · Find the boundary</span>
   <h3>Click the one line that creates a new stage.</h3>
   <p class="hint">i.e. the line that forces a shuffle.</p>
-  <div class="pipe" id="pipeB">
-    <span class="line" data-ok="0">df = spark.read.parquet("/orders")        <span class="cmt"># read</span></span>
-    <span class="line" data-ok="0">  .filter(col("status") == "paid")        <span class="cmt"># keep paid</span></span>
-    <span class="line" data-ok="0">  .withColumn("net", col("amt") * 0.8)    <span class="cmt"># derive col</span></span>
-    <span class="line" data-ok="1">  .groupBy("customer_id").sum("net")      <span class="cmt"># total per customer</span></span>
-    <span class="line" data-ok="0">  .filter(col("sum(net)") > 100)          <span class="cmt"># big spenders</span></span>
-    <span class="line" data-ok="0">df.write.parquet("/big_spenders")         <span class="cmt"># action</span></span>
+  <div class="qz-pick" data-wrong="✗ That's a narrow transformation (or the read/write) — no data crosses the network, so no new stage. Look for the operation that regroups rows by a key.">
+    <span class="qz-line" data-correct="false">df = spark.read.parquet("/orders")        <span class="cmt"># read</span></span>
+    <span class="qz-line" data-correct="false">  .filter(col("status") == "paid")        <span class="cmt"># keep paid</span></span>
+    <span class="qz-line" data-correct="false">  .withColumn("net", col("amt") * 0.8)    <span class="cmt"># derive col</span></span>
+    <span class="qz-line" data-correct="true"
+          data-feedback="✓ Yes — groupBy is a wide transformation. It shuffles rows by customer_id, ending Stage 0 (read→filter→withColumn) and starting Stage 1 (aggregate→filter→write). One shuffle ⇒ two stages.">  .groupBy("customer_id").sum("net")      <span class="cmt"># total per customer</span></span>
+    <span class="qz-line" data-correct="false">  .filter(col("sum(net)") > 100)          <span class="cmt"># big spenders</span></span>
+    <span class="qz-line" data-correct="false">df.write.parquet("/big_spenders")         <span class="cmt"># action</span></span>
   </div>
-  <div class="pipefb" id="fbB">&nbsp;</div>
 </div>
 
-<div class="ex" id="exC">
+<div class="ex">
   <span class="tasklbl">Exercise C · Predict, then reveal</span>
   <h3>How many shuffles (stage boundaries) does this job have?</h3>
   <pre><code>(customers.join(orders, "customer_id")   <span class="cmt"># combine two tables</span>
           .groupBy("region").count()      <span class="cmt"># count per region</span>
           .show())                         <span class="cmt"># action</span></code></pre>
-  <div class="choices" id="choicesC">
-    <button data-v="0">0</button>
-    <button data-v="1">1</button>
-    <button data-v="2">2</button>
-    <button data-v="3">3</button>
-  </div>
-  <div class="reveal" id="revealC">
-    <strong>Two shuffles.</strong> The <code>join</code> redistributes both tables by
-    <code>customer_id</code> so matching rows meet (shuffle 1). The <code>groupBy("region")</code>
-    then redistributes again by <code>region</code> (shuffle 2). <code>show()</code> is the
-    action that triggers it all.
-    <br><br><em>Nuance for later:</em> the <em>exact</em> stage count also depends on the
-    <strong>join strategy</strong> — if <code>orders</code> were tiny, Spark could
-    <em>broadcast</em> it and skip the join's shuffle entirely. That's
-    <a class="xref" href="../reference/glossary.html#aqe">AQE</a> &amp; join strategy, coming in
-    a later lesson.
+  <div class="qz-reveal" data-answer="2">
+    <div class="qz-choices">
+      <button data-v="0">0</button>
+      <button data-v="1">1</button>
+      <button data-v="2">2</button>
+      <button data-v="3">3</button>
+    </div>
+    <div class="qz-explain">
+      <strong>Two shuffles.</strong> The <code>join</code> redistributes both tables by
+      <code>customer_id</code> so matching rows meet (shuffle 1). The <code>groupBy("region")</code>
+      then redistributes again by <code>region</code> (shuffle 2). <code>show()</code> is the
+      action that triggers it all.
+      <br><br><em>Nuance for later:</em> the <em>exact</em> stage count also depends on the
+      <strong>join strategy</strong> — if <code>orders</code> were tiny, Spark could
+      <em>broadcast</em> it and skip the join's shuffle entirely. That's
+      <a class="xref" href="../reference/glossary.html#aqe">AQE</a> &amp; join strategy, coming in
+      a later lesson.
+    </div>
   </div>
 </div>
 
@@ -340,73 +225,6 @@ from memory; you get feedback the instant you click.</p>
 </div>
 
 </div>
-
-<script>
-(function(){
-  // ---- Exercise A: transformation vs action ----
-  var ops = [
-    {op:"filter",     a:"T", why:"Defines a new filtered DataFrame — lazy."},
-    {op:"count",      a:"A", why:"Asks for a number → triggers a job."},
-    {op:"select",     a:"T", why:"Projects columns — lazy, no execution."},
-    {op:"write",      a:"A", why:"Writes output → triggers execution."},
-    {op:"groupBy",    a:"T", why:"Lazy (and wide — it'll cause a shuffle when run)."},
-    {op:"collect",    a:"A", why:"Pulls rows to the driver → triggers a job."},
-    {op:"withColumn", a:"T", why:"Adds a derived column — lazy."},
-    {op:"show",       a:"A", why:"Renders rows → triggers a job."}
-  ];
-  var grid = document.getElementById("gridA");
-  var done = {}, total = ops.length;
-  ops.forEach(function(o, i){
-    var tile = document.createElement("div"); tile.className="tile";
-    tile.innerHTML =
-      '<div class="op">'+o.op+'()</div>'+
-      '<div class="btns">'+
-        '<button data-c="T">Transform</button>'+
-        '<button data-c="A">Action</button>'+
-      '</div><div class="fb">&nbsp;</div>';
-    var fb = tile.querySelector(".fb");
-    tile.querySelectorAll("button").forEach(function(b){
-      b.addEventListener("click", function(){
-        var correct = b.getAttribute("data-c") === o.a;
-        tile.querySelectorAll("button").forEach(function(x){x.classList.remove("sel-good","sel-bad");});
-        b.classList.add(correct ? "sel-good" : "sel-bad");
-        fb.textContent = (correct ? "✓ " : "✗ ") + o.why;
-        fb.className = "fb " + (correct ? "ok" : "no");
-        done[i] = correct;
-        var n=0; for(var k in done){ if(done[k]) n++; }
-        document.getElementById("scoreA").textContent = n + " / " + total + " correct";
-      });
-    });
-    grid.appendChild(tile);
-  });
-
-  // ---- Exercise B: find the stage boundary ----
-  document.querySelectorAll("#pipeB .line").forEach(function(line){
-    line.addEventListener("click", function(){
-      var ok = line.getAttribute("data-ok") === "1";
-      document.querySelectorAll("#pipeB .line").forEach(function(l){l.classList.remove("ok","no");});
-      line.classList.add(ok ? "ok" : "no");
-      var fb = document.getElementById("fbB");
-      if(ok){
-        fb.className="pipefb ok";
-        fb.innerHTML="✓ Yes — <code>groupBy</code> is a <b>wide</b> transformation. It shuffles rows by customer_id, ending Stage 0 (read→filter→withColumn) and starting Stage 1 (aggregate→filter→write). One shuffle ⇒ two stages.";
-      } else {
-        fb.className="pipefb no";
-        fb.innerHTML="✗ That's a <b>narrow</b> transformation (or the read/write) — no data crosses the network, so no new stage. Look for the operation that regroups rows by a key.";
-      }
-    });
-  });
-
-  // ---- Exercise C: predict & reveal ----
-  document.querySelectorAll("#choicesC button").forEach(function(b){
-    b.addEventListener("click", function(){
-      var ok = b.getAttribute("data-v") === "2";
-      document.querySelectorAll("#choicesC button").forEach(function(x){x.classList.remove("ok","no");});
-      b.classList.add(ok ? "ok" : "no");
-      document.getElementById("revealC").classList.add("show");
-    });
-  });
-})();
-</script>
+<script src="../assets/quiz.js"></script>
 </body>
 </html>

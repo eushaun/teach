@@ -4,138 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lesson 2 · Arrays, Objects, and the Shape of Your Data</title>
-<style>
-  :root {
-    --bg: #fffff8;
-    --ink: #1a1a1a;
-    --faint: #767676;
-    --rule: #ddd;
-    --accent: #8a2c2c;
-    --code-bg: #f4f2ec;
-    --good: #2e6b34;
-    --bad: #a33327;
-    --py: #2b5b84;
-    --ts: #2d5fa8;
-  }
-  * { box-sizing: border-box; }
-  body {
-    background: var(--bg);
-    color: var(--ink);
-    font-family: Palatino, "Palatino Linotype", Georgia, serif;
-    font-size: 17px;
-    line-height: 1.6;
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 3rem 1.5rem 6rem;
-  }
-  header { margin-bottom: 2.5rem; }
-  .kicker {
-    font-size: 0.8rem;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--accent);
-    font-weight: 600;
-  }
-  h1 { font-size: 2.1rem; font-weight: 400; margin: 0.3rem 0 0.5rem; line-height: 1.2; }
-  .meta { color: var(--faint); font-style: italic; }
-  h2 { font-size: 1.3rem; font-weight: 600; margin-top: 3rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.3rem; }
-  h3 { font-size: 1.05rem; font-weight: 600; margin-top: 1.8rem; }
-  code, pre {
-    font-family: Consolas, "Cascadia Code", Menlo, monospace;
-    font-size: 0.85em;
-    background: var(--code-bg);
-    border-radius: 3px;
-  }
-  code { padding: 0.1em 0.35em; }
-  pre { padding: 0.8rem 1rem; overflow-x: auto; line-height: 1.5; }
-  pre code { background: none; padding: 0; }
-  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.95rem; }
-  th { text-align: left; font-weight: 600; border-bottom: 2px solid var(--ink); padding: 0.4rem 0.6rem; }
-  td { border-bottom: 1px solid var(--rule); padding: 0.45rem 0.6rem; vertical-align: top; }
-  .pill { display: inline-block; font-size: 0.7rem; font-family: Consolas, monospace; padding: 0.1em 0.5em; border-radius: 9px; color: white; }
-  .pill.py { background: var(--py); }
-  .pill.ts { background: var(--ts); }
-  .bigidea {
-    border-left: 3px solid var(--accent);
-    background: #faf6f0;
-    padding: 0.9rem 1.2rem;
-    margin: 1.5rem 0;
-  }
-  .bigidea strong { color: var(--accent); }
-  .win {
-    background: #f0f5ef;
-    border-left: 3px solid var(--good);
-    padding: 0.9rem 1.2rem;
-    margin: 1.5rem 0;
-  }
-  .trap {
-    background: #faf0ee;
-    border-left: 3px solid var(--bad);
-    padding: 0.9rem 1.2rem;
-    margin: 1.5rem 0;
-    font-size: 0.95rem;
-  }
-  .step { display: flex; gap: 0.9rem; margin: 1.3rem 0; }
-  .step-num {
-    flex: 0 0 1.9rem;
-    height: 1.9rem;
-    border-radius: 50%;
-    background: var(--ink);
-    color: var(--bg);
-    font-family: Consolas, monospace;
-    font-size: 0.95rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-top: 0.15rem;
-  }
-  .step-body { flex: 1; min-width: 0; }
-  .step-body p:first-child { margin-top: 0; }
-  .quiz-q {
-    margin: 2rem 0;
-    padding: 1.1rem 1.3rem;
-    border: 1px solid var(--rule);
-    border-radius: 6px;
-    background: #fffdf4;
-  }
-  .quiz-q p.qtext { margin-top: 0; font-weight: 600; }
-  .quiz-opt {
-    display: block;
-    width: 100%;
-    text-align: left;
-    font-family: inherit;
-    font-size: 0.95rem;
-    background: var(--bg);
-    border: 1px solid var(--rule);
-    border-radius: 4px;
-    padding: 0.5rem 0.8rem;
-    margin: 0.4rem 0;
-    cursor: pointer;
-  }
-  .quiz-opt:hover { border-color: var(--ink); }
-  .quiz-opt.correct { border-color: var(--good); background: #f0f5ef; }
-  .quiz-opt.wrong { border-color: var(--bad); background: #faf0ee; }
-  .quiz-feedback { font-size: 0.9rem; margin-top: 0.6rem; display: none; }
-  .quiz-feedback.good { color: var(--good); display: block; }
-  .quiz-feedback.bad { color: var(--bad); display: block; }
-  .source-box {
-    border: 1px solid var(--rule);
-    border-radius: 6px;
-    padding: 1rem 1.3rem;
-    margin: 1.5rem 0;
-    background: #fcfbf5;
-  }
-  .source-box h3 { margin-top: 0; }
-  a { color: var(--accent); }
-  footer { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--faint); font-size: 0.9rem; }
-  .checklist { list-style: none; padding-left: 0; }
-  .checklist li { margin: 0.5rem 0; }
-  .checklist input { margin-right: 0.6rem; }
-  @media print {
-    body { max-width: 100%; font-size: 11pt; padding: 0; }
-    .quiz-opt { border: 1px solid #999; }
-  }
-</style>
+<link rel="stylesheet" href="../assets/course.css">
 </head>
 <body>
 
@@ -155,7 +24,7 @@
 <button class="quiz-opt" data-q="w1" data-ok="yes">They are completely erased</button>
 <button class="quiz-opt" data-q="w1" data-ok="no">They become runtime assertions</button>
 <button class="quiz-opt" data-q="w1" data-ok="no">They turn into comments</button>
-<p class="quiz-feedback" id="fb-w1"></p>
+<p class="quiz-feedback" id="fb-w1" data-explain="Enforced, then erased — the running JavaScript has never heard of your types."></p>
 </div>
 
 <div class="quiz-q">
@@ -163,7 +32,7 @@
 <button class="quiz-opt" data-q="w2" data-ok="yes">When the compiler checks</button>
 <button class="quiz-opt" data-q="w2" data-ok="no">When the program executes</button>
 <button class="quiz-opt" data-q="w2" data-ok="no">Never, that is permitted</button>
-<p class="quiz-feedback" id="fb-w2"></p>
+<p class="quiz-feedback" id="fb-w2" data-explain="At compile time, before anything runs. let allows reassignment, but never a type change."></p>
 </div>
 
 <h2 id="arrays">1 · Arrays — your lists</h2>
@@ -323,7 +192,7 @@ for (const sync of results) {
 <button class="quiz-opt" data-q="1" data-ok="no"><code>[string]</code></button>
 <button class="quiz-opt" data-q="1" data-ok="no"><code>list[string]</code></button>
 <button class="quiz-opt" data-q="1" data-ok="yes"><code>string[]</code></button>
-<p class="quiz-feedback" id="fb-1"></p>
+<p class="quiz-feedback" id="fb-1" data-explain="Element type + square brackets. [string] is a tuple of exactly one string — different thing."></p>
 </div>
 
 <div class="quiz-q">
@@ -331,7 +200,7 @@ for (const sync of results) {
 <button class="quiz-opt" data-q="2" data-ok="no">a dict: any keys, any values</button>
 <button class="quiz-opt" data-q="2" data-ok="yes">a TypedDict: fixed, known, typed fields</button>
 <button class="quiz-opt" data-q="2" data-ok="no">a list: ordered values by position</button>
-<p class="quiz-feedback" id="fb-2"></p>
+<p class="quiz-feedback" id="fb-2" data-explain="Fixed, known, typo-checked fields with dot access. Real dicts (arbitrary keys) use Record or Map — later lesson."></p>
 </div>
 
 <div class="quiz-q">
@@ -339,7 +208,7 @@ for (const sync of results) {
 <button class="quiz-opt" data-q="3" data-ok="yes"><code>errorMessage?: string;</code></button>
 <button class="quiz-opt" data-q="3" data-ok="no"><code>errorMessage: string?;</code></button>
 <button class="quiz-opt" data-q="3" data-ok="no"><code>errorMessage: Optional[string];</code></button>
-<p class="quiz-feedback" id="fb-3"></p>
+<p class="quiz-feedback" id="fb-3" data-explain="The ? goes right after the property name, before the colon."></p>
 </div>
 
 <div class="quiz-q">
@@ -347,7 +216,7 @@ for (const sync of results) {
 <button class="quiz-opt" data-q="4" data-ok="no"><code>for (const r in results) { }</code></button>
 <button class="quiz-opt" data-q="4" data-ok="yes"><code>for (const r of results) { }</code></button>
 <button class="quiz-opt" data-q="4" data-ok="no"><code>for const r of results: { }</code></button>
-<p class="quiz-feedback" id="fb-4"></p>
+<p class="quiz-feedback" id="fb-4" data-explain="of gives values. in gives the indices (&quot;0&quot;, &quot;1&quot;, &quot;2&quot;) — the classic Python-habit trap."></p>
 </div>
 
 <div class="quiz-q">
@@ -355,7 +224,7 @@ for (const sync of results) {
 <button class="quiz-opt" data-q="5" data-ok="no"><code>alias TableSync = { ... };</code></button>
 <button class="quiz-opt" data-q="5" data-ok="no"><code>class TableSync = { ... };</code></button>
 <button class="quiz-opt" data-q="5" data-ok="yes"><code>type TableSync = { ... };</code></button>
-<p class="quiz-feedback" id="fb-5"></p>
+<p class="quiz-feedback" id="fb-5" data-explain="The type keyword. It names the shape; the data itself is just an object literal."></p>
 </div>
 
 <h2 id="next">6 · Going deeper</h2>
@@ -381,35 +250,7 @@ for (const sync of results) {
 <p>Lesson 0002 · 2026-06-12 · TypeScript learning workspace</p>
 </footer>
 
-<script>
-document.querySelectorAll('.quiz-opt').forEach(function (btn) {
-  btn.addEventListener('click', function () {
-    var q = btn.getAttribute('data-q');
-    var ok = btn.getAttribute('data-ok') === 'yes';
-    var fb = document.getElementById('fb-' + q);
-    document.querySelectorAll('.quiz-opt[data-q="' + q + '"]').forEach(function (b) {
-      b.classList.remove('correct', 'wrong');
-    });
-    btn.classList.add(ok ? 'correct' : 'wrong');
-    var explanations = {
-      'w1': 'Enforced, then erased — the running JavaScript has never heard of your types.',
-      'w2': 'At compile time, before anything runs. let allows reassignment, but never a type change.',
-      '1': 'Element type + square brackets. [string] is a tuple of exactly one string — different thing.',
-      '2': 'Fixed, known, typo-checked fields with dot access. Real dicts (arbitrary keys) use Record or Map — later lesson.',
-      '3': 'The ? goes right after the property name, before the colon.',
-      '4': 'of gives values. in gives the indices ("0", "1", "2") — the classic Python-habit trap.',
-      '5': 'The type keyword. It names the shape; the data itself is just an object literal.'
-    };
-    if (ok) {
-      fb.textContent = '✓ Correct. ' + explanations[q];
-      fb.className = 'quiz-feedback good';
-    } else {
-      fb.textContent = '✗ Not quite — recall the section, then try again.';
-      fb.className = 'quiz-feedback bad';
-    }
-  });
-});
-</script>
+<script src="../assets/quiz.js"></script>
 
 </body>
 </html>

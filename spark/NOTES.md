@@ -11,8 +11,19 @@
   style unless he says otherwise).
 
 ## Teaching conventions for this workspace
-- Lessons: clean, Tufte-inspired HTML; serif body; numbered citations → references list;
-  self-contained (inline CSS/JS, no external deps); print-friendly.
+- **Build from shared components in `./assets/` — reuse is the default.** Read `./assets/`
+  before authoring any lesson; never inline-duplicate CSS/JS a future lesson would repeat.
+  Current components:
+  - `assets/course.css` — the design system (typography, layout, callouts, diagram helper,
+    glossary styles, print). Every lesson + reference doc links it.
+  - `assets/quiz.css` + `assets/quiz.js` — declarative, auto-wired quiz widgets:
+    `.qz-classify` (tag items into categories), `.qz-pick` (click the correct code line),
+    `.qz-reveal` (predict via multiple-choice, then reveal). Markup conventions documented
+    in the header of `quiz.js`. Just write markup + include the script — no per-lesson JS.
+  - When a lesson needs a new reusable thing (simulator, new widget, diagram helper), add it
+    to `./assets/` as a component and link it; grow the library over time.
+- Lessons: clean, Tufte-inspired; serif body; numbered citations → references list;
+  print-friendly. Link the shared assets via relative paths (`../assets/...`).
 - Maintain a single **glossary** (`reference/glossary.html`) and use its terms
   consistently in every lesson. Link glossary terms via `#anchor`.
 - Each lesson: one tangible win, tied to the mission, ends with a "primary source" and a
