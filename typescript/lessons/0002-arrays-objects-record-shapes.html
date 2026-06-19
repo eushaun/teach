@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 2 · Arrays, Objects, and the Shape of Your Data</title>
+<style>
+  :root {
+    --bg: #fffff8;
+    --ink: #1a1a1a;
+    --faint: #767676;
+    --rule: #ddd;
+    --accent: #8a2c2c;
+    --code-bg: #f4f2ec;
+    --good: #2e6b34;
+    --bad: #a33327;
+    --py: #2b5b84;
+    --ts: #2d5fa8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Palatino, "Palatino Linotype", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.6;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 6rem;
+  }
+  header { margin-bottom: 2.5rem; }
+  .kicker {
+    font-size: 0.8rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h1 { font-size: 2.1rem; font-weight: 400; margin: 0.3rem 0 0.5rem; line-height: 1.2; }
+  .meta { color: var(--faint); font-style: italic; }
+  h2 { font-size: 1.3rem; font-weight: 600; margin-top: 3rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.3rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin-top: 1.8rem; }
+  code, pre {
+    font-family: Consolas, "Cascadia Code", Menlo, monospace;
+    font-size: 0.85em;
+    background: var(--code-bg);
+    border-radius: 3px;
+  }
+  code { padding: 0.1em 0.35em; }
+  pre { padding: 0.8rem 1rem; overflow-x: auto; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.95rem; }
+  th { text-align: left; font-weight: 600; border-bottom: 2px solid var(--ink); padding: 0.4rem 0.6rem; }
+  td { border-bottom: 1px solid var(--rule); padding: 0.45rem 0.6rem; vertical-align: top; }
+  .pill { display: inline-block; font-size: 0.7rem; font-family: Consolas, monospace; padding: 0.1em 0.5em; border-radius: 9px; color: white; }
+  .pill.py { background: var(--py); }
+  .pill.ts { background: var(--ts); }
+  .bigidea {
+    border-left: 3px solid var(--accent);
+    background: #faf6f0;
+    padding: 0.9rem 1.2rem;
+    margin: 1.5rem 0;
+  }
+  .bigidea strong { color: var(--accent); }
+  .win {
+    background: #f0f5ef;
+    border-left: 3px solid var(--good);
+    padding: 0.9rem 1.2rem;
+    margin: 1.5rem 0;
+  }
+  .trap {
+    background: #faf0ee;
+    border-left: 3px solid var(--bad);
+    padding: 0.9rem 1.2rem;
+    margin: 1.5rem 0;
+    font-size: 0.95rem;
+  }
+  .step { display: flex; gap: 0.9rem; margin: 1.3rem 0; }
+  .step-num {
+    flex: 0 0 1.9rem;
+    height: 1.9rem;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--bg);
+    font-family: Consolas, monospace;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.15rem;
+  }
+  .step-body { flex: 1; min-width: 0; }
+  .step-body p:first-child { margin-top: 0; }
+  .quiz-q {
+    margin: 2rem 0;
+    padding: 1.1rem 1.3rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: #fffdf4;
+  }
+  .quiz-q p.qtext { margin-top: 0; font-weight: 600; }
+  .quiz-opt {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    font-size: 0.95rem;
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 0.5rem 0.8rem;
+    margin: 0.4rem 0;
+    cursor: pointer;
+  }
+  .quiz-opt:hover { border-color: var(--ink); }
+  .quiz-opt.correct { border-color: var(--good); background: #f0f5ef; }
+  .quiz-opt.wrong { border-color: var(--bad); background: #faf0ee; }
+  .quiz-feedback { font-size: 0.9rem; margin-top: 0.6rem; display: none; }
+  .quiz-feedback.good { color: var(--good); display: block; }
+  .quiz-feedback.bad { color: var(--bad); display: block; }
+  .source-box {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 1rem 1.3rem;
+    margin: 1.5rem 0;
+    background: #fcfbf5;
+  }
+  .source-box h3 { margin-top: 0; }
+  a { color: var(--accent); }
+  footer { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--faint); font-size: 0.9rem; }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { margin: 0.5rem 0; }
+  .checklist input { margin-right: 0.6rem; }
+  @media print {
+    body { max-width: 100%; font-size: 11pt; padding: 0; }
+    .quiz-opt { border: 1px solid #999; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">TypeScript · Lesson 2 · ~30 minutes</div>
+  <h1>Arrays, Objects, and the Shape of Your Data</h1>
+  <p class="meta">Lists and records — and the moment TypeScript starts paying off for a data engineer: the compiler catches a misspelled field name that Python would have shipped to production.</p>
+</header>
+
+<p><strong>Mission link:</strong> nearly everything an MCP server does is "receive a shaped record, do something, return a shaped record." Today you learn to describe those shapes. This is the on-ramp to reading real SDK code.</p>
+
+<h2 id="warmup">0 · Warm-up — retrieval from Lesson 1</h2>
+<p>From memory, before anything else. (This spacing is deliberate: recalling last week's idea is what moves it to long-term storage.)</p>
+
+<div class="quiz-q">
+<p class="qtext">W1. What happens to your type annotations in the JavaScript that actually runs?</p>
+<button class="quiz-opt" data-q="w1" data-ok="yes">They are completely erased</button>
+<button class="quiz-opt" data-q="w1" data-ok="no">They become runtime assertions</button>
+<button class="quiz-opt" data-q="w1" data-ok="no">They turn into comments</button>
+<p class="quiz-feedback" id="fb-w1"></p>
+</div>
+
+<div class="quiz-q">
+<p class="qtext">W2. You write <code>let n = 5;</code> then <code>n = "five";</code> — when do you find out something is wrong?</p>
+<button class="quiz-opt" data-q="w2" data-ok="yes">When the compiler checks</button>
+<button class="quiz-opt" data-q="w2" data-ok="no">When the program executes</button>
+<button class="quiz-opt" data-q="w2" data-ok="no">Never, that is permitted</button>
+<p class="quiz-feedback" id="fb-w2"></p>
+</div>
+
+<h2 id="arrays">1 · Arrays — your lists</h2>
+
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th></tr>
+<tr>
+<td><pre>tables: list[str] = [
+    "fact_orders",
+    "dim_customers",
+]
+tables.append("dim_products")
+n = len(tables)
+first = tables[0]</pre></td>
+<td><pre>const tables: string[] = [
+  "fact_orders",
+  "dim_customers",
+];
+tables.push("dim_products");
+const n = tables.length;
+const first = tables[0];</pre></td>
+</tr>
+</table>
+
+<p>The type is <code>string[]</code> — element type, then square brackets. Works for any type: <code>number[]</code>, <code>boolean[]</code>. (You'll also see the equivalent <code>Array&lt;number&gt;</code> in the wild.) Inference works here too: <code>const xs = [1, 2, 3]</code> is already <code>number[]</code> without an annotation. <span style="font-size:0.9rem;">Source: <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html">Everyday Types</a>.</span></p>
+
+<div class="trap">
+<strong>Two Python habits that bite here:</strong>
+<ul style="margin: 0.4rem 0 0;">
+  <li><strong>Don't write <code>[string]</code></strong> — that means something different (a tuple of exactly one string), not an array.</li>
+  <li><strong>No negative indexing.</strong> <code>tables[-1]</code> quietly gives you <code>undefined</code>, not the last element. Use <code>tables.at(-1)</code> or <code>tables[tables.length - 1]</code>.</li>
+</ul>
+</div>
+
+<p>And a <code>const</code> subtlety worth noticing in the example above: <code>tables.push(...)</code> is legal on a <code>const</code> array. <code>const</code> means the <em>name</em> can't be re-pointed at a different array — the array's contents can still change. (Same spirit as a Python tuple holding a list.)</p>
+
+<h3>Looping: <code>for...of</code></h3>
+
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th></tr>
+<tr>
+<td><pre>for t in tables:
+    print(t)</pre></td>
+<td><pre>for (const t of tables) {
+  console.log(t);
+}</pre></td>
+</tr>
+</table>
+
+<div class="trap">
+<strong>The <code>of</code>/<code>in</code> trap:</strong> TypeScript also has <code>for...in</code>, and your Python muscle memory will reach for it — but it iterates <em>indices</em> ("0", "1", "2"), not values. For values, it's always <code>of</code>.
+</div>
+
+<h2 id="objects">2 · Objects — they look like dicts, they behave like TypedDicts</h2>
+
+<p>Here's a record in both languages:</p>
+
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th></tr>
+<tr>
+<td><pre>sync = {
+    "table": "fact_orders",
+    "rows_loaded": 120_000,
+}
+print(sync["table"])</pre></td>
+<td><pre>const sync = {
+  table: "fact_orders",
+  rowsLoaded: 120_000,
+};
+console.log(sync.table);</pre></td>
+</tr>
+</table>
+
+<div class="bigidea">
+<strong>The mental model:</strong> a TypeScript object literal <em>looks</em> like a Python dict, but treat it like a <strong>TypedDict or dataclass instance</strong>: fixed, known fields with individual types, accessed with dot notation, and <strong>typo-checked by the compiler</strong>. <code>sync.tabel</code> is a compile error, not a 2am <code>KeyError</code>.
+</div>
+
+<p>Note the differences: keys are unquoted, and access is <code>sync.table</code>, not <code>sync["table"]</code>. If you're thinking "but sometimes I need a <em>real</em> dict — arbitrary keys discovered at runtime" — you're right, and TypeScript has containers for that (<code>Record</code>, <code>Map</code>). Parked for a later lesson; today is about records with known shapes.</p>
+
+<h2 id="aliases">3 · Type aliases — naming a shape</h2>
+
+<p>Inline object types get unwieldy fast. A <strong>type alias</strong> gives the shape a reusable name — Python's <code>class TableSync(TypedDict)</code>, in one line:</p>
+
+<pre><code>type TableSync = {
+  table: string;
+  rowsLoaded: number;
+  success: boolean;
+  errorMessage?: string;   // ? = optional, like NotRequired[str]
+};</code></pre>
+
+<p>Now <code>TableSync</code> works anywhere a type works — parameters, returns, and arrays of records:</p>
+
+<pre><code>function describeSync(sync: TableSync): string {
+  return `${sync.table}: ${sync.rowsLoaded} rows`;
+}
+
+const results: TableSync[] = [ /* ... */ ];   // a typed result set</code></pre>
+
+<p>Three details worth knowing, straight from the <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html">handbook</a>:</p>
+<ul>
+  <li>Inside a <code>type</code> definition, separate members with <code>;</code> (convention) — commas are also legal. Inside an object <em>literal</em> (the data), it's always commas.</li>
+  <li><code>errorMessage?</code> means the field may be absent. A record without it is fine; a record missing <code>success</code> is a compile error.</li>
+  <li>You'll also meet <code>interface</code> in the wild — it does the same job for object shapes. We'll compare them later; read it as "same idea" for now.</li>
+</ul>
+
+<h2 id="practice">4 · Hands on — a typed pipeline report</h2>
+
+<p>Open the <a href="https://www.typescriptlang.org/play" target="_blank"><strong>Playground</strong></a>, clear it, and paste:</p>
+
+<pre><code>type TableSync = {
+  table: string;
+  rowsLoaded: number;
+  success: boolean;
+  errorMessage?: string;
+};
+
+const results: TableSync[] = [
+  { table: "fact_orders", rowsLoaded: 120_000, success: true },
+  { table: "dim_customers", rowsLoaded: 8_500, success: true },
+  { table: "dim_products", rowsLoaded: 0, success: false, errorMessage: "API rate limit hit" },
+];
+
+for (const sync of results) {
+  console.log(`${sync.table}: ${sync.rowsLoaded} rows`);
+}</code></pre>
+
+<div class="step"><div class="step-num">1</div><div class="step-body">
+<p><strong>Run it.</strong> Three lines in the Logs — you just looped over a typed result set. Notice the third record has <code>errorMessage</code> and the others don't: that's the <code>?</code> doing its job.</p>
+</div></div>
+
+<div class="step"><div class="step-num">2</div><div class="step-body">
+<p><strong>The typo test.</strong> Change <code>sync.table</code> to <code>sync.tabel</code>. Instant squiggle: <em>"Property 'tabel' does not exist on type 'TableSync'."</em> In Python, <code>sync["tabel"]</code> passes every linter and explodes at runtime — in whichever environment first hits that code path. Here it cannot compile. Fix it back.</p>
+</div></div>
+
+<div class="step"><div class="step-num">3</div><div class="step-body">
+<p><strong>The missing-field test.</strong> Delete <code>success: true,</code> from the first record. Read the error — the compiler tells you exactly which required property is missing from which record. Restore it.</p>
+</div></div>
+
+<div class="step"><div class="step-num">4</div><div class="step-body">
+<p><strong>Write <code>totalRows</code> from scratch.</strong> A function taking <code>TableSync[]</code> and returning the total of all <code>rowsLoaded</code> as a <code>number</code>. You'll need an accumulator — your first legitimate use of <code>let</code> (and <code>+=</code> works exactly like Python). Verify:</p>
+<pre><code>console.log(totalRows(results));  // should print: 128500</code></pre>
+<p>While typing, pause after <code>sync.</code> and watch the autocomplete — the editor knows every field. That's the shape information working for you.</p>
+</div></div>
+
+<div class="step"><div class="step-num">5</div><div class="step-body">
+<p><strong>A teaser for next time.</strong> Hover over <code>errorMessage</code> in <code>results[2].errorMessage</code> (add that line if you like). The tooltip says <code>string | undefined</code> — "string <em>or</em> undefined." That vertical bar is a <strong>union type</strong>, and it's how TypeScript forces you to handle the maybe-missing case before using the value. That story — unions, <code>null</code>/<code>undefined</code>, and narrowing — is coming soon.</p>
+</div></div>
+
+<div class="win">
+<strong>Your win today:</strong> you modelled a pipeline result set as typed records, and the compiler caught both a misspelled field and a missing field — the two classic dict bugs Python only reveals at runtime.
+</div>
+
+<h2 id="quiz">5 · Check your retrieval</h2>
+
+<div class="quiz-q">
+<p class="qtext">1. The type for an array of table names (strings) is…</p>
+<button class="quiz-opt" data-q="1" data-ok="no"><code>[string]</code></button>
+<button class="quiz-opt" data-q="1" data-ok="no"><code>list[string]</code></button>
+<button class="quiz-opt" data-q="1" data-ok="yes"><code>string[]</code></button>
+<p class="quiz-feedback" id="fb-1"></p>
+</div>
+
+<div class="quiz-q">
+<p class="qtext">2. The closest Python concept to a TypeScript object like <code>{ table: "users", rows: 5 }</code> is…</p>
+<button class="quiz-opt" data-q="2" data-ok="no">a dict: any keys, any values</button>
+<button class="quiz-opt" data-q="2" data-ok="yes">a TypedDict: fixed, known, typed fields</button>
+<button class="quiz-opt" data-q="2" data-ok="no">a list: ordered values by position</button>
+<p class="quiz-feedback" id="fb-2"></p>
+</div>
+
+<div class="quiz-q">
+<p class="qtext">3. How do you mark <code>errorMessage</code> as optional inside a type alias?</p>
+<button class="quiz-opt" data-q="3" data-ok="yes"><code>errorMessage?: string;</code></button>
+<button class="quiz-opt" data-q="3" data-ok="no"><code>errorMessage: string?;</code></button>
+<button class="quiz-opt" data-q="3" data-ok="no"><code>errorMessage: Optional[string];</code></button>
+<p class="quiz-feedback" id="fb-3"></p>
+</div>
+
+<div class="quiz-q">
+<p class="qtext">4. Python's <code>for r in results:</code> becomes…</p>
+<button class="quiz-opt" data-q="4" data-ok="no"><code>for (const r in results) { }</code></button>
+<button class="quiz-opt" data-q="4" data-ok="yes"><code>for (const r of results) { }</code></button>
+<button class="quiz-opt" data-q="4" data-ok="no"><code>for const r of results: { }</code></button>
+<p class="quiz-feedback" id="fb-4"></p>
+</div>
+
+<div class="quiz-q">
+<p class="qtext">5. To give a record shape a reusable name, you write…</p>
+<button class="quiz-opt" data-q="5" data-ok="no"><code>alias TableSync = { ... };</code></button>
+<button class="quiz-opt" data-q="5" data-ok="no"><code>class TableSync = { ... };</code></button>
+<button class="quiz-opt" data-q="5" data-ok="yes"><code>type TableSync = { ... };</code></button>
+<p class="quiz-feedback" id="fb-5"></p>
+</div>
+
+<h2 id="next">6 · Going deeper</h2>
+
+<div class="source-box">
+<h3>📖 Primary source for this lesson</h3>
+<p><a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html"><strong>Everyday Types</strong></a> — the official handbook chapter covering exactly today's ground (arrays, object types, optional properties, type aliases) plus the union types we teased in step 5. Read up to and including "Type Aliases"; ~15 minutes.</p>
+</div>
+
+<p><strong>Self-check:</strong></p>
+<ul class="checklist">
+  <li><label><input type="checkbox"> I wrote <code>totalRows</code> myself and got 128500</label></li>
+  <li><label><input type="checkbox"> I saw the compiler catch a misspelled and a missing field</label></li>
+  <li><label><input type="checkbox"> I can explain why an object is a TypedDict, not a dict</label></li>
+  <li><label><input type="checkbox"> I know which loop keyword gives values (<code>of</code>, not <code>in</code>)</label></li>
+</ul>
+
+<p><strong>Next lesson:</strong> functions as values — arrow functions, and <code>map</code>/<code>filter</code>, which are TypeScript's list comprehensions. After that, the union-types story from step 5.</p>
+
+<footer>
+<p><strong>Stuck or curious?</strong> Ask your teacher — paste any error or snippet into the chat. If <code>totalRows</code> fought back, that's worth a conversation, not a struggle.</p>
+<p>References: <a href="../reference/python-to-typescript.html">Python → TypeScript cheat sheet</a> · <a href="../reference/glossary.html">Glossary</a> · Previous: <a href="0001-typescript-through-python-eyes.html">Lesson 1</a></p>
+<p>Lesson 0002 · 2026-06-12 · TypeScript learning workspace</p>
+</footer>
+
+<script>
+document.querySelectorAll('.quiz-opt').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var q = btn.getAttribute('data-q');
+    var ok = btn.getAttribute('data-ok') === 'yes';
+    var fb = document.getElementById('fb-' + q);
+    document.querySelectorAll('.quiz-opt[data-q="' + q + '"]').forEach(function (b) {
+      b.classList.remove('correct', 'wrong');
+    });
+    btn.classList.add(ok ? 'correct' : 'wrong');
+    var explanations = {
+      'w1': 'Enforced, then erased — the running JavaScript has never heard of your types.',
+      'w2': 'At compile time, before anything runs. let allows reassignment, but never a type change.',
+      '1': 'Element type + square brackets. [string] is a tuple of exactly one string — different thing.',
+      '2': 'Fixed, known, typo-checked fields with dot access. Real dicts (arbitrary keys) use Record or Map — later lesson.',
+      '3': 'The ? goes right after the property name, before the colon.',
+      '4': 'of gives values. in gives the indices ("0", "1", "2") — the classic Python-habit trap.',
+      '5': 'The type keyword. It names the shape; the data itself is just an object literal.'
+    };
+    if (ok) {
+      fb.textContent = '✓ Correct. ' + explanations[q];
+      fb.className = 'quiz-feedback good';
+    } else {
+      fb.textContent = '✗ Not quite — recall the section, then try again.';
+      fb.className = 'quiz-feedback bad';
+    }
+  });
+});
+</script>
+
+</body>
+</html>

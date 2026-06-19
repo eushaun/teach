@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 1 · TypeScript Through Python Eyes</title>
+<style>
+  :root {
+    --bg: #fffff8;
+    --ink: #1a1a1a;
+    --faint: #767676;
+    --rule: #ddd;
+    --accent: #8a2c2c;
+    --code-bg: #f4f2ec;
+    --good: #2e6b34;
+    --bad: #a33327;
+    --py: #2b5b84;
+    --ts: #2d5fa8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Palatino, "Palatino Linotype", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.6;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 6rem;
+  }
+  header { margin-bottom: 2.5rem; }
+  .kicker {
+    font-size: 0.8rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h1 { font-size: 2.1rem; font-weight: 400; margin: 0.3rem 0 0.5rem; line-height: 1.2; }
+  .meta { color: var(--faint); font-style: italic; }
+  h2 { font-size: 1.3rem; font-weight: 600; margin-top: 3rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.3rem; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin-top: 1.8rem; }
+  code, pre {
+    font-family: Consolas, "Cascadia Code", Menlo, monospace;
+    font-size: 0.85em;
+    background: var(--code-bg);
+    border-radius: 3px;
+  }
+  code { padding: 0.1em 0.35em; }
+  pre { padding: 0.8rem 1rem; overflow-x: auto; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.95rem; }
+  th { text-align: left; font-weight: 600; border-bottom: 2px solid var(--ink); padding: 0.4rem 0.6rem; }
+  td { border-bottom: 1px solid var(--rule); padding: 0.45rem 0.6rem; vertical-align: top; }
+  .pill { display: inline-block; font-size: 0.7rem; font-family: Consolas, monospace; padding: 0.1em 0.5em; border-radius: 9px; color: white; }
+  .pill.py { background: var(--py); }
+  .pill.ts { background: var(--ts); }
+  .bigidea {
+    border-left: 3px solid var(--accent);
+    background: #faf6f0;
+    padding: 0.9rem 1.2rem;
+    margin: 1.5rem 0;
+  }
+  .bigidea strong { color: var(--accent); }
+  .win {
+    background: #f0f5ef;
+    border-left: 3px solid var(--good);
+    padding: 0.9rem 1.2rem;
+    margin: 1.5rem 0;
+  }
+  .step {
+    display: flex;
+    gap: 0.9rem;
+    margin: 1.3rem 0;
+  }
+  .step-num {
+    flex: 0 0 1.9rem;
+    height: 1.9rem;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--bg);
+    font-family: Consolas, monospace;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.15rem;
+  }
+  .step-body { flex: 1; min-width: 0; }
+  .step-body p:first-child { margin-top: 0; }
+  /* Quiz */
+  .quiz-q {
+    margin: 2rem 0;
+    padding: 1.1rem 1.3rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: #fffdf4;
+  }
+  .quiz-q p.qtext { margin-top: 0; font-weight: 600; }
+  .quiz-opt {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    font-size: 0.95rem;
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 0.5rem 0.8rem;
+    margin: 0.4rem 0;
+    cursor: pointer;
+  }
+  .quiz-opt:hover { border-color: var(--ink); }
+  .quiz-opt.correct { border-color: var(--good); background: #f0f5ef; }
+  .quiz-opt.wrong { border-color: var(--bad); background: #faf0ee; }
+  .quiz-feedback { font-size: 0.9rem; margin-top: 0.6rem; display: none; }
+  .quiz-feedback.good { color: var(--good); display: block; }
+  .quiz-feedback.bad { color: var(--bad); display: block; }
+  .source-box {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 1rem 1.3rem;
+    margin: 1.5rem 0;
+    background: #fcfbf5;
+  }
+  .source-box h3 { margin-top: 0; }
+  a { color: var(--accent); }
+  footer { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--faint); font-size: 0.9rem; }
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { margin: 0.5rem 0; }
+  .checklist input { margin-right: 0.6rem; }
+  @media print {
+    body { max-width: 100%; font-size: 11pt; padding: 0; }
+    .quiz-opt { border: 1px solid #999; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">TypeScript · Lesson 1 · ~30 minutes</div>
+  <h1>TypeScript Through Python Eyes</h1>
+  <p class="meta">You'll run real TypeScript in your browser, translate three pieces of Python syntax, and watch the compiler catch a bug that Python would have let through to production.</p>
+</header>
+
+<p><strong>Why this matters for your mission:</strong> the official MCP SDK, most LLM-generated app code, and the modern web stack are all TypeScript. Fluency starts with one mental model and a handful of syntax remaps — and you already own most of the underlying concepts from Python.</p>
+
+<h2 id="big-idea">1 · The one big idea</h2>
+
+<p>You've seen Python type hints:</p>
+
+<pre><code>def label_table(table: str, row_count: int) -> str:
+    return f"{table}: {row_count} rows"</code></pre>
+
+<p>Python <em>ignores</em> these at runtime. They're documentation unless you separately run a checker like mypy — and even then, the code runs anyway.</p>
+
+<p>TypeScript looks remarkably similar:</p>
+
+<pre><code>function labelTable(table: string, rowCount: number): string {
+  return `${table}: ${rowCount} rows`;
+}</code></pre>
+
+<div class="bigidea">
+<strong>The big idea:</strong> TypeScript types are <strong>enforced, then erased</strong>. The compiler refuses to build code with type errors — it's a mandatory mypy. Then it strips every annotation and emits plain JavaScript, which is what actually runs. Types exist only at compile time; the running program has never heard of them.
+<br><br>
+<span style="font-size: 0.9rem;">Source: <a href="https://www.typescriptlang.org/docs/handbook/typescript-from-scratch.html">TypeScript for the New Programmer</a> — "TypeScript's type system was designed to be erased".</span>
+</div>
+
+<p>One more piece of the picture: TypeScript never runs directly. It compiles to <strong>JavaScript</strong>, which runs in browsers or in <strong>Node.js</strong> (the JS equivalent of the <code>python</code> command). You don't need to install anything today — we'll use the official in-browser <a href="https://www.typescriptlang.org/play">Playground</a>.</p>
+
+<h2 id="remap">2 · Three syntax remaps</h2>
+
+<h3>Remap 1 — variables: <code>const</code> and <code>let</code></h3>
+
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th></tr>
+<tr>
+<td><pre>table_name = "fact_orders"
+batch_size = 500
+batch_size = 1000  # fine</pre></td>
+<td><pre>const tableName = "fact_orders";
+let batchSize = 500;
+batchSize = 1000;  // fine — it's let</pre></td>
+</tr>
+</table>
+
+<p>Python has one way to bind a name. TypeScript makes you choose: <code>const</code> (can never be reassigned) or <code>let</code> (can be). <strong>Idiom: default to <code>const</code></strong>; use <code>let</code> only when reassignment is the point. Also note: <code>camelCase</code> instead of <code>snake_case</code>, and semicolons at the end of statements.</p>
+
+<h3>Remap 2 — the primitive types</h3>
+
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th><th>Watch out</th></tr>
+<tr><td><code>str</code></td><td><code>string</code></td><td><code>`backticks with ${x}`</code> are your f-strings</td></tr>
+<tr><td><code>int</code>, <code>float</code></td><td><code>number</code></td><td><strong>One type for both.</strong> <code>3</code> and <code>3.7</code> are both <code>number</code></td></tr>
+<tr><td><code>True</code> / <code>False</code></td><td><code>true</code> / <code>false</code></td><td>Lowercase, type is <code>boolean</code></td></tr>
+</table>
+
+<p>For a data engineer, <code>number</code> is the surprise: there is no int/float split — every number is a 64-bit float. (Where Python has <code>None</code>, TypeScript has <em>two</em> nothing-values, <code>null</code> and <code>undefined</code> — parked for a future lesson.) <span style="font-size:0.9rem;">Source: <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html">Everyday Types</a>, the official handbook.</span></p>
+
+<h3>Remap 3 — functions</h3>
+
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th></tr>
+<tr>
+<td><pre>def is_large(row_count: int) -> bool:
+    return row_count > 1_000_000</pre></td>
+<td><pre>function isLarge(rowCount: number): boolean {
+  return rowCount > 1_000_000;
+}</pre></td>
+</tr>
+</table>
+
+<p>Three mechanical changes: <code>def</code> → <code>function</code>, the <code>-></code> arrow becomes <code>:</code> after the parentheses, and the body lives in braces instead of an indented block. Parameter annotations are written identically. Even the <code>1_000_000</code> digit separator carries over. And <code>print(...)</code>? That's <code>console.log(...)</code>.</p>
+
+<p>One genuinely new thing — <strong>type inference</strong>. TypeScript works out unannotated types from values:</p>
+
+<pre><code>const tableName = "fact_orders";  // inferred: string
+let batchSize = 500;              // inferred: number
+batchSize = "big";                // ❌ Type 'string' is not assignable to type 'number'</code></pre>
+
+<p>Idiomatic TypeScript annotates <strong>function parameters and return types</strong>, and lets inference handle local variables.</p>
+
+<h2 id="practice">3 · Hands on — make the compiler work for you</h2>
+
+<p>Open the <a href="https://www.typescriptlang.org/play" target="_blank"><strong>TypeScript Playground</strong></a> in a new tab. It's the official in-browser editor: red squiggles are the compiler talking to you, and the <em>Run</em> button executes the compiled JavaScript (output appears in the <em>Logs</em> tab on the right).</p>
+
+<div class="step"><div class="step-num">1</div><div class="step-body">
+<p><strong>Run your first TypeScript.</strong> Delete whatever is in the editor and paste:</p>
+<pre><code>function labelTable(table: string, rowCount: number): string {
+  return `${table}: ${rowCount} rows`;
+}
+
+const message = labelTable("fact_orders", 1250);
+console.log(message);</code></pre>
+<p>Press <em>Run</em>. You should see <code>fact_orders: 1250 rows</code> in the Logs.</p>
+</div></div>
+
+<div class="step"><div class="step-num">2</div><div class="step-body">
+<p><strong>Break it on purpose.</strong> Change <code>1250</code> to <code>"1250"</code> (a string). Don't run it — just watch. A red squiggle appears <em>immediately</em>. Hover over it and read the message:</p>
+<pre><code>Argument of type 'string' is not assignable to parameter of type 'number'.</code></pre>
+<p>Read TypeScript errors backwards: what was <em>expected</em> (number), what was <em>given</em> (string). In Python this bug ships and explodes at 2am in a pipeline; here it never compiles. Fix it back to <code>1250</code>.</p>
+</div></div>
+
+<div class="step"><div class="step-num">3</div><div class="step-body">
+<p><strong>Feel the difference between <code>const</code> and <code>let</code>.</strong> Below <code>console.log(message)</code>, add:</p>
+<pre><code>message = "something else";</code></pre>
+<p>Read the new error. Now change <code>const message</code> to <code>let message</code> — the error vanishes. Change it back to <code>const</code> and delete the reassignment line: the value never needed to change.</p>
+</div></div>
+
+<div class="step"><div class="step-num">4</div><div class="step-body">
+<p><strong>Write a function from scratch</strong> (no peeking at Remap 3): a function <code>isLarge</code> that takes a row count (number) and returns whether it exceeds one million (boolean). Then check yourself:</p>
+<pre><code>console.log(isLarge(2_500_000));  // should print: true
+console.log(isLarge(800));        // should print: false</code></pre>
+<p>If the squiggles disagree with you, hover and read — that's the feedback loop that will teach you this language.</p>
+</div></div>
+
+<div class="step"><div class="step-num">5</div><div class="step-body">
+<p><strong>See inference.</strong> Hover your mouse over <code>message</code> in the line where it's declared. The tooltip shows <code>const message: string</code> — you never wrote that type. The compiler inferred it. Hovering to ask "what type does the compiler think this is?" is a core TypeScript skill.</p>
+</div></div>
+
+<div class="win">
+<strong>Your win today:</strong> you wrote and ran real TypeScript, and you made the compiler catch a type bug <em>before the code ran</em> — the single thing Python type hints never did for you.
+</div>
+
+<h2 id="quiz">4 · Check your retrieval</h2>
+
+<p>From memory — no scrolling up. Click an answer to get instant feedback; if you miss one, retrieve the right idea before moving on.</p>
+
+<div class="quiz-q">
+<p class="qtext">1. After the TypeScript compiler checks your type annotations, what does it do with them?</p>
+<button class="quiz-opt" data-q="1" data-ok="yes">Erases them from the output</button>
+<button class="quiz-opt" data-q="1" data-ok="no">Embeds them as runtime checks</button>
+<button class="quiz-opt" data-q="1" data-ok="no">Stores them in metadata files</button>
+<p class="quiz-feedback" id="fb-1"></p>
+</div>
+
+<div class="quiz-q">
+<p class="qtext">2. Which declaration is idiomatic for a value that is never reassigned?</p>
+<button class="quiz-opt" data-q="2" data-ok="no"><code>let rowCount = 10;</code></button>
+<button class="quiz-opt" data-q="2" data-ok="yes"><code>const rowCount = 10;</code></button>
+<button class="quiz-opt" data-q="2" data-ok="no"><code>rowCount = 10;</code></button>
+<p class="quiz-feedback" id="fb-2"></p>
+</div>
+
+<div class="quiz-q">
+<p class="qtext">3. In TypeScript's type system, the values <code>3</code> and <code>3.7</code> have…</p>
+<button class="quiz-opt" data-q="3" data-ok="no">two different types, int and float</button>
+<button class="quiz-opt" data-q="3" data-ok="yes">one single shared type, called number</button>
+<button class="quiz-opt" data-q="3" data-ok="no">two different types, num and decimal</button>
+<p class="quiz-feedback" id="fb-3"></p>
+</div>
+
+<div class="quiz-q">
+<p class="qtext">4. Python's <code>f"{table} has {n} rows"</code> becomes which TypeScript?</p>
+<button class="quiz-opt" data-q="4" data-ok="no"><code>f"{table} has {n} rows"</code></button>
+<button class="quiz-opt" data-q="4" data-ok="no"><code>"$table has $n rows"</code></button>
+<button class="quiz-opt" data-q="4" data-ok="yes"><code>`${table} has ${n} rows`</code></button>
+<p class="quiz-feedback" id="fb-4"></p>
+</div>
+
+<div class="quiz-q">
+<p class="qtext">5. You call <code>labelTable("users", "42")</code> but the parameter is declared <code>rowCount: number</code>. What happens?</p>
+<button class="quiz-opt" data-q="5" data-ok="yes">Error before the code runs</button>
+<button class="quiz-opt" data-q="5" data-ok="no">Error while the code runs</button>
+<button class="quiz-opt" data-q="5" data-ok="no">Works, the string gets coerced</button>
+<p class="quiz-feedback" id="fb-5"></p>
+</div>
+
+<h2 id="next">5 · Going deeper</h2>
+
+<div class="source-box">
+<h3>📖 Primary source for this lesson</h3>
+<p><a href="https://www.typescriptlang.org/docs/handbook/typescript-from-scratch.html"><strong>TypeScript for the New Programmer</strong></a> — the official guide written specifically for people learning TypeScript <em>without</em> a JavaScript background. A 10-minute read that deepens today's mental model. If you want one more, the free book <a href="https://www.totaltypescript.com/books/total-typescript-essentials">Total TypeScript Essentials</a> by Matt Pocock teaches the same editor-first way we practiced in step 5.</p>
+</div>
+
+<p><strong>Self-check before next session</strong> (be honest — these drive what we do next):</p>
+<ul class="checklist">
+  <li><label><input type="checkbox"> I ran TypeScript in the Playground and saw output in the Logs</label></li>
+  <li><label><input type="checkbox"> I provoked a type error on purpose and could read what it meant</label></li>
+  <li><label><input type="checkbox"> I wrote <code>isLarge</code> myself and it printed <code>true</code> then <code>false</code></label></li>
+  <li><label><input type="checkbox"> I can say out loud what "enforced, then erased" means</label></li>
+</ul>
+
+<p><strong>Next lesson:</strong> arrays and objects — TypeScript's lists and dicts, and how to describe the <em>shape</em> of a record (the gateway to everything data-flavoured, and to MCP servers).</p>
+
+<footer>
+<p><strong>Stuck or curious?</strong> Ask your teacher — that's me, the agent in your terminal. Paste any error message or playground snippet into the chat and we'll work through it. No question is too small.</p>
+<p>References: <a href="../reference/python-to-typescript.html">Python → TypeScript cheat sheet</a> · <a href="../reference/glossary.html">Glossary</a></p>
+<p>Lesson 0001 · 2026-06-12 · TypeScript learning workspace</p>
+</footer>
+
+<script>
+document.querySelectorAll('.quiz-opt').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var q = btn.getAttribute('data-q');
+    var ok = btn.getAttribute('data-ok') === 'yes';
+    var fb = document.getElementById('fb-' + q);
+    document.querySelectorAll('.quiz-opt[data-q="' + q + '"]').forEach(function (b) {
+      b.classList.remove('correct', 'wrong');
+    });
+    btn.classList.add(ok ? 'correct' : 'wrong');
+    var explanations = {
+      '1': 'Enforced, then erased: the emitted JavaScript contains no types at all.',
+      '2': 'Default to const; let is only for values that genuinely change. Bare assignment without const/let is not a declaration.',
+      '3': 'One type: number. Every number is a 64-bit float — no int/float split.',
+      '4': 'Backticks + ${...} — template literals are TypeScript\'s f-strings. Note the $ before the braces.',
+      '5': 'The compiler rejects it before anything runs. That is the whole point of TypeScript.'
+    };
+    if (ok) {
+      fb.textContent = '✓ Correct. ' + explanations[q];
+      fb.className = 'quiz-feedback good';
+    } else {
+      fb.textContent = '✗ Not quite — recall the lesson, then try again. ';
+      fb.className = 'quiz-feedback bad';
+    }
+  });
+});
+</script>
+
+</body>
+</html>

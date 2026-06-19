@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TypeScript Glossary</title>
+<style>
+  :root {
+    --bg: #fffff8;
+    --ink: #1a1a1a;
+    --faint: #767676;
+    --rule: #ddd;
+    --accent: #8a2c2c;
+    --code-bg: #f4f2ec;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Palatino, "Palatino Linotype", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.55;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 5rem;
+  }
+  h1 { font-size: 1.9rem; font-weight: 400; margin-bottom: 0.2rem; }
+  .subtitle { color: var(--faint); font-style: italic; margin-top: 0; }
+  dl { margin-top: 2rem; }
+  dt {
+    font-weight: 700;
+    margin-top: 1.4rem;
+    font-size: 1.05rem;
+  }
+  dt .py-anchor {
+    font-weight: 400;
+    font-style: italic;
+    color: var(--faint);
+    font-size: 0.85rem;
+    margin-left: 0.5rem;
+  }
+  dd { margin-left: 0; margin-top: 0.25rem; }
+  code {
+    font-family: Consolas, "Cascadia Code", Menlo, monospace;
+    font-size: 0.85em;
+    background: var(--code-bg);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+  }
+  footer { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--faint); font-size: 0.85rem; }
+  a { color: var(--accent); }
+  @media print { body { max-width: 100%; font-size: 11pt; padding: 0; } }
+</style>
+</head>
+<body>
+
+<h1>TypeScript Glossary</h1>
+<p class="subtitle">Terms as used in this workspace. Python anchors in grey. Grows with each lesson.</p>
+
+<dl>
+  <dt id="typescript">TypeScript (TS)</dt>
+  <dd>A language that adds a static type system on top of JavaScript. Every valid JavaScript program is also valid TypeScript; TypeScript adds type annotations and compile-time checking, then compiles down to plain JavaScript.</dd>
+
+  <dt id="javascript">JavaScript (JS)</dt>
+  <dd>The language that actually runs — in browsers and in Node.js. TypeScript never runs directly; it always becomes JavaScript first. Think of JS as TypeScript's runtime form.</dd>
+
+  <dt id="compile-time">Compile time vs runtime <span class="py-anchor">Python: mypy check vs python run</span></dt>
+  <dd><em>Compile time</em> is when the TypeScript compiler checks your types and translates your code. <em>Runtime</em> is when the resulting JavaScript executes. Type errors are caught at compile time — before the code ever runs. Python's closest equivalent is running <code>mypy</code> before <code>python</code>, except in TypeScript the check is not optional.</dd>
+
+  <dt id="compiler">Compiler (<code>tsc</code>)</dt>
+  <dd>The TypeScript compiler. It does two jobs: (1) checks types and reports errors, (2) erases the types and emits plain JavaScript. Inside editors and the Playground, the same engine powers the red squiggles.</dd>
+
+  <dt id="type-annotation">Type annotation <span class="py-anchor">Python: type hint</span></dt>
+  <dd>The <code>: type</code> after a variable or parameter name — <code>count: number</code>. Looks like a Python type hint, but it is enforced: violating it is a compile error, not a suggestion.</dd>
+
+  <dt id="type-inference">Type inference</dt>
+  <dd>The compiler working out a type you didn't write. <code>const name = "orders"</code> gives <code>name</code> the type <code>string</code> with no annotation needed. Idiomatic TypeScript annotates function signatures and lets inference handle local variables.</dd>
+
+  <dt id="type-error">Type error</dt>
+  <dd>A compile-time complaint that values and types don't line up, e.g. <em>"Argument of type 'string' is not assignable to parameter of type 'number'"</em>. Read it backwards: what was expected, what was given.</dd>
+
+  <dt id="const">const / let <span class="py-anchor">Python: plain assignment</span></dt>
+  <dd>The two ways to declare a variable. <code>const</code> cannot be reassigned; <code>let</code> can. Python has no equivalent distinction — default to <code>const</code> and reach for <code>let</code> only when reassignment is the point.</dd>
+
+  <dt id="template-literal">Template literal <span class="py-anchor">Python: f-string</span></dt>
+  <dd>A backtick string with <code>${expression}</code> holes: <code>`Loaded ${n} rows`</code>. TypeScript's f-string.</dd>
+
+  <dt id="playground">TypeScript Playground</dt>
+  <dd>The official in-browser editor at <a href="https://www.typescriptlang.org/play">typescriptlang.org/play</a>. Type-checks as you type and can run the compiled JavaScript — no installation needed.</dd>
+
+  <dt id="array">Array <span class="py-anchor">Python: list</span></dt>
+  <dd>The ordered, mutable collection. Typed as <code>string[]</code>, <code>number[]</code>, etc. — element type then square brackets. No negative indexing: use <code>xs.at(-1)</code> for the last element.</dd>
+
+  <dt id="object-literal">Object literal <span class="py-anchor">Python: TypedDict / dataclass instance</span></dt>
+  <dd>Braces with key–value pairs: <code>{ table: "users", rows: 5 }</code>. Looks like a Python dict, but has fixed, known, individually-typed fields, accessed with dot notation (<code>sync.table</code>) and typo-checked by the compiler. For genuine arbitrary-key dictionaries TypeScript uses <code>Record</code> or <code>Map</code> (later lesson).</dd>
+
+  <dt id="property">Property <span class="py-anchor">Python: key / attribute</span></dt>
+  <dd>A named field of an object — its name plus its type. <code>rowsLoaded: number</code> is a property of <code>TableSync</code>.</dd>
+
+  <dt id="optional-property">Optional property (<code>?</code>) <span class="py-anchor">Python: NotRequired / Optional field</span></dt>
+  <dd>A property marked <code>name?: type</code> may be absent from the object. Reading it yields <code>type | undefined</code>, which the compiler makes you handle before use.</dd>
+
+  <dt id="type-alias">Type alias (<code>type</code>) <span class="py-anchor">Python: TypedDict class / type statement</span></dt>
+  <dd>A reusable name for a type: <code>type TableSync = { table: string; rowsLoaded: number };</code>. Purely a name — it creates no runtime class, and two aliases for the same shape are interchangeable.</dd>
+
+  <dt id="for-of">for...of <span class="py-anchor">Python: for x in xs</span></dt>
+  <dd>The value-iterating loop: <code>for (const t of tables) { }</code>. Beware its sibling <code>for...in</code>, which iterates indices/keys, not values.</dd>
+
+  <dt id="union-type">Union type (<code>|</code>) <span class="py-anchor">Python: X | Y in hints</span></dt>
+  <dd>A type that is one of several possibilities: <code>string | undefined</code> means "a string, or undefined." Teased in Lesson 2; taught properly in a future lesson.</dd>
+
+  <dt id="nodejs">Node.js</dt>
+  <dd>A program that runs JavaScript outside the browser — the JS equivalent of the <code>python</code> interpreter on your machine. MCP servers run on Node. We set it up in a later lesson.</dd>
+</dl>
+
+<footer>
+Part of the TypeScript learning workspace · See also the <a href="python-to-typescript.html">Python → TypeScript cheat sheet</a>
+</footer>
+
+</body>
+</html>

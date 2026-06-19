@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Glossary — Spark Engine</title>
+<style>
+  :root{
+    --ink:#1a1a1a; --muted:#6b6b6b; --rule:#e4e0d8; --bg:#fdfcf9;
+    --accent:#9a3412; --accent-soft:#fbeae0; --code-bg:#f4f1ea;
+  }
+  *{box-sizing:border-box;}
+  html{font-size:17px;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Iowan Old Style","Charter",Georgia,Cambria,"Times New Roman",serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:780px; margin:0 auto; padding:4rem 1.5rem 6rem;}
+  header{border-bottom:2px solid var(--ink); padding-bottom:1rem; margin-bottom:2rem;}
+  .kicker{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    text-transform:uppercase; letter-spacing:.14em; font-size:.7rem; color:var(--accent);
+    font-weight:700; margin:0 0 .5rem;}
+  h1{font-size:2rem; line-height:1.1; margin:0 0 .4rem; font-weight:600;}
+  .lede{color:var(--muted); font-size:1.02rem; margin:.4rem 0 0; font-style:italic;}
+  .toc{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.82rem;
+    display:flex; flex-wrap:wrap; gap:.4rem .9rem; margin:1.4rem 0 0;}
+  .toc a{color:var(--accent); text-decoration:none; border-bottom:1px dotted var(--accent);}
+  dl{margin:0;}
+  .term{padding:1.1rem 0; border-bottom:1px solid var(--rule); scroll-margin-top:1rem;}
+  dt{font-weight:700; font-size:1.12rem; display:flex; align-items:baseline; gap:.6rem;}
+  dt .tag{font-family:ui-sans-serif,system-ui,sans-serif; font-size:.62rem;
+    text-transform:uppercase; letter-spacing:.1em; font-weight:700; color:var(--accent);
+    background:var(--accent-soft); padding:.12rem .45rem; border-radius:999px;}
+  dd{margin:.45rem 0 0; color:#2b2b2b;}
+  dd .why{display:block; margin-top:.35rem; color:var(--muted); font-size:.92rem;}
+  code{font-family:"SF Mono",ui-monospace,"Cascadia Code",Consolas,monospace;
+    background:var(--code-bg); padding:.08em .35em; border-radius:4px; font-size:.84em;}
+  .xref{color:var(--accent); text-decoration:none; border-bottom:1px dotted var(--accent);}
+  footer{margin-top:3rem; color:var(--muted); font-size:.82rem;
+    font-family:ui-sans-serif,system-ui,sans-serif; border-top:1px solid var(--rule);
+    padding-top:1rem;}
+  @media print{
+    body{background:#fff;} .toc{display:none;}
+    .term{break-inside:avoid;} a{color:var(--ink); border:none;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <p class="kicker">Reference · Spark Engine</p>
+  <h1>Glossary</h1>
+  <p class="lede">The canonical vocabulary for this course. Lessons link here; meanings stay
+  consistent across every lesson. Forward-referenced terms are marked <span class="tag" style="position:static">soon</span>.</p>
+  <nav class="toc">
+    <a href="#driver">Driver</a><a href="#executor">Executor</a><a href="#partition">Partition</a>
+    <a href="#transformation">Transformation</a><a href="#action">Action</a>
+    <a href="#lazy">Lazy evaluation</a><a href="#job">Job</a><a href="#stage">Stage</a>
+    <a href="#task">Task</a><a href="#shuffle">Shuffle</a><a href="#narrow">Narrow transform</a>
+    <a href="#wide">Wide transform</a><a href="#dag">DAG</a><a href="#catalyst">Catalyst</a>
+    <a href="#plan">Query plan</a><a href="#aqe">AQE</a><a href="#slot">Slot / core</a>
+  </nav>
+</header>
+
+<dl>
+  <div class="term" id="driver">
+    <dt>Driver</dt>
+    <dd>The single process that runs your program, builds the execution plan, and
+    schedules work onto the cluster. It does <em>not</em> process the bulk of the data —
+    it coordinates.
+    <span class="why">Debugging cue: <code>collect()</code> pulls data <em>to the driver</em>;
+    too much → driver OOM.</span></dd>
+  </div>
+
+  <div class="term" id="executor">
+    <dt>Executor</dt>
+    <dd>A JVM process on a worker node that actually runs <a class="xref" href="#task">tasks</a>
+    and holds data <a class="xref" href="#partition">partitions</a> in memory/disk. A
+    cluster has many; each has a fixed number of cores and a memory budget.
+    <span class="why">Tuning cue: total parallelism ≈ (executors × cores).</span></dd>
+  </div>
+
+  <div class="term" id="partition">
+    <dt>Partition</dt>
+    <dd>A contiguous chunk of a distributed dataset — the unit of <em>data</em>. One
+    partition is processed by one <a class="xref" href="#task">task</a> at a time.
+    <span class="why">Too few = under-parallelised; too many tiny ones = scheduling
+    overhead. This balance recurs in almost every tuning decision.</span></dd>
+  </div>
+
+  <div class="term" id="transformation">
+    <dt>Transformation</dt>
+    <dd>An operation that defines a <em>new</em> dataset from an existing one
+    (<code>select</code>, <code>filter</code>, <code>join</code>, <code>groupBy</code>,
+    <code>withColumn</code>). It is <a class="xref" href="#lazy">lazy</a> — it builds the
+    plan but runs nothing.</dd>
+  </div>
+
+  <div class="term" id="action">
+    <dt>Action</dt>
+    <dd>An operation that asks for a <em>result</em> and therefore triggers execution
+    (<code>count</code>, <code>collect</code>, <code>show</code>, <code>write</code>,
+    <code>take</code>). One action ≈ one <a class="xref" href="#job">job</a>.</dd>
+  </div>
+
+  <div class="term" id="lazy">
+    <dt>Lazy evaluation</dt>
+    <dd>Spark records transformations without running them, building up a plan, until an
+    <a class="xref" href="#action">action</a> forces execution.
+    <span class="why">This is <em>why</em> optimization is possible: Spark sees the whole
+    chain at once and can rewrite it (push filters down, prune columns) before running.</span></dd>
+  </div>
+
+  <div class="term" id="job">
+    <dt>Job</dt>
+    <dd>The unit of work triggered by one <a class="xref" href="#action">action</a>. A job
+    is split into <a class="xref" href="#stage">stages</a>.</dd>
+  </div>
+
+  <div class="term" id="stage">
+    <dt>Stage</dt>
+    <dd>A set of tasks that can run together without moving data across the network. Stage
+    boundaries occur at <a class="xref" href="#shuffle">shuffles</a>. A job has as many
+    stages as it has shuffles, plus one.</dd>
+  </div>
+
+  <div class="term" id="task">
+    <dt>Task</dt>
+    <dd>The smallest unit of <em>execution</em>: one task processes one
+    <a class="xref" href="#partition">partition</a> of data within a
+    <a class="xref" href="#stage">stage</a>. Tasks of a stage run in parallel across
+    executor cores.</dd>
+  </div>
+
+  <div class="term" id="shuffle">
+    <dt>Shuffle</dt>
+    <dd>The physical redistribution of data across partitions (and usually across the
+    network) so that rows sharing a key land together — required by <code>groupBy</code>,
+    <code>join</code>, <code>distinct</code>, <code>repartition</code>.
+    <span class="why">The most expensive thing Spark does (disk + network + serialization).
+    Every stage boundary is a shuffle. Reducing/avoiding shuffles is the #1 perf lever.</span></dd>
+  </div>
+
+  <div class="term" id="narrow">
+    <dt>Narrow transformation</dt>
+    <dd>Each input partition contributes to exactly one output partition
+    (<code>filter</code>, <code>select</code>, <code>map</code>). No shuffle; stays within
+    a stage; runs pipelined.</dd>
+  </div>
+
+  <div class="term" id="wide">
+    <dt>Wide transformation</dt>
+    <dd>Input partitions feed <em>many</em> output partitions, requiring a
+    <a class="xref" href="#shuffle">shuffle</a> (<code>groupBy</code>, <code>join</code>,
+    <code>distinct</code>). Causes a <a class="xref" href="#stage">stage</a> boundary.</dd>
+  </div>
+
+  <div class="term" id="dag">
+    <dt>DAG (Directed Acyclic Graph)</dt>
+    <dd>The graph of transformations Spark builds for a job. The DAGScheduler splits it
+    into stages. You see it visualised in the Spark UI.</dd>
+  </div>
+
+  <div class="term" id="catalyst">
+    <dt>Catalyst <span class="tag">soon</span></dt>
+    <dd>Spark SQL's query optimizer. It turns your DataFrame/SQL code into an optimized
+    physical plan through a pipeline of rules (analysis → logical optimization → physical
+    planning). <em>Covered in Lesson 2.</em></dd>
+  </div>
+
+  <div class="term" id="plan">
+    <dt>Query plan <span class="tag">soon</span></dt>
+    <dd>The tree of operators Spark will execute, viewable with <code>df.explain()</code>.
+    Stages: unresolved → analyzed → optimized logical → physical. <em>Lesson 2.</em></dd>
+  </div>
+
+  <div class="term" id="aqe">
+    <dt>AQE (Adaptive Query Execution) <span class="tag">soon</span></dt>
+    <dd>Runtime re-optimization: at each shuffle boundary Spark uses <em>actual</em>
+    statistics to coalesce partitions, switch join strategies, and handle skew. On by
+    default in Spark 3.2+ and on Databricks. <em>Covered later.</em></dd>
+  </div>
+
+  <div class="term" id="slot">
+    <dt>Slot / core</dt>
+    <dd>An execution slot on an executor (≈ one CPU core). A slot runs one
+    <a class="xref" href="#task">task</a> at a time, so total concurrent tasks ≈ total
+    slots. This caps real parallelism regardless of partition count.</dd>
+  </div>
+</dl>
+
+<footer>
+  Spark Engine course · Glossary v1 · started 2026-06-19. Definitions grounded in the
+  Apache Spark docs and <em>Learning Spark, 2nd Ed.</em> — see <code>RESOURCES.md</code>.
+</footer>
+</div>
+</body>
+</html>

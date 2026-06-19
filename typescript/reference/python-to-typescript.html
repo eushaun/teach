@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python → TypeScript Cheat Sheet</title>
+<style>
+  :root {
+    --bg: #fffff8;
+    --ink: #1a1a1a;
+    --faint: #767676;
+    --rule: #ddd;
+    --accent: #8a2c2c;
+    --code-bg: #f4f2ec;
+    --py: #2b5b84;
+    --ts: #2d5fa8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Palatino, "Palatino Linotype", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.55;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 5rem;
+  }
+  h1 { font-size: 1.9rem; font-weight: 400; margin-bottom: 0.2rem; }
+  h2 { font-size: 1.25rem; font-weight: 600; margin-top: 2.5rem; border-bottom: 1px solid var(--rule); padding-bottom: 0.3rem; }
+  .subtitle { color: var(--faint); font-style: italic; margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.95rem; }
+  th { text-align: left; font-weight: 600; border-bottom: 2px solid var(--ink); padding: 0.4rem 0.6rem; }
+  td { border-bottom: 1px solid var(--rule); padding: 0.45rem 0.6rem; vertical-align: top; }
+  code, pre {
+    font-family: Consolas, "Cascadia Code", Menlo, monospace;
+    font-size: 0.85em;
+    background: var(--code-bg);
+    border-radius: 3px;
+  }
+  code { padding: 0.1em 0.35em; }
+  pre { padding: 0.8rem 1rem; overflow-x: auto; line-height: 1.45; }
+  .note {
+    border-left: 3px solid var(--accent);
+    padding: 0.5rem 1rem;
+    margin: 1rem 0;
+    background: #faf6f0;
+    font-size: 0.95rem;
+  }
+  .pill { display: inline-block; font-size: 0.7rem; font-family: Consolas, monospace; padding: 0.1em 0.5em; border-radius: 9px; color: white; vertical-align: middle; }
+  .pill.py { background: var(--py); }
+  .pill.ts { background: var(--ts); }
+  footer { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--faint); font-size: 0.85rem; }
+  a { color: var(--accent); }
+  @media print {
+    body { max-width: 100%; font-size: 11pt; padding: 0; }
+    .note { background: none; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Python → TypeScript</h1>
+<p class="subtitle">A growing translation table for a Python speaker. Updated as lessons progress.</p>
+
+<div class="note">
+<strong>The one big difference:</strong> Python type hints are <em>advisory</em> — the interpreter ignores them. TypeScript types are <em>enforced</em> — code with type errors won't compile. Then the types are erased: the JavaScript that runs contains no types at all.
+</div>
+
+<h2 id="variables">Variables</h2>
+<table>
+<tr><th>Concept</th><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th><th>Notes</th></tr>
+<tr>
+  <td>Bind, never reassign</td>
+  <td><code>row_count = 42</code></td>
+  <td><code>const rowCount = 42;</code></td>
+  <td><strong>Default to <code>const</code>.</strong> Reassigning a <code>const</code> is a compile error.</td>
+</tr>
+<tr>
+  <td>Bind, will reassign</td>
+  <td><code>row_count = 42</code></td>
+  <td><code>let rowCount = 42;</code></td>
+  <td>Use <code>let</code> only when the value genuinely changes (loop counters, accumulators).</td>
+</tr>
+<tr>
+  <td>Naming convention</td>
+  <td><code>snake_case</code></td>
+  <td><code>camelCase</code></td>
+  <td>Classes are <code>PascalCase</code> in both.</td>
+</tr>
+<tr>
+  <td>Statement end</td>
+  <td>newline</td>
+  <td><code>;</code> (semicolon)</td>
+  <td>Technically optional, but idiomatic code uses them. Just always add them.</td>
+</tr>
+</table>
+
+<h2 id="types">Primitive types</h2>
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th><th>Notes</th></tr>
+<tr><td><code>str</code></td><td><code>string</code></td><td>Quotes: <code>'single'</code>, <code>"double"</code>, or <code>`backticks`</code> for f-string-like interpolation.</td></tr>
+<tr><td><code>int</code> <em>and</em> <code>float</code></td><td><code>number</code></td><td><strong>One numeric type.</strong> <code>3</code> and <code>3.7</code> are both <code>number</code> (a 64-bit float). No int/float distinction.</td></tr>
+<tr><td><code>bool</code> — <code>True</code>/<code>False</code></td><td><code>boolean</code> — <code>true</code>/<code>false</code></td><td>Lowercase literals.</td></tr>
+<tr><td><code>None</code></td><td><code>null</code> <em>and</em> <code>undefined</code></td><td>TypeScript has <em>two</em> "nothing" values. Details in a later lesson — for now know both exist.</td></tr>
+</table>
+
+<h2 id="strings">String interpolation</h2>
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th></tr>
+<tr>
+  <td><pre>f"Loaded {n} rows"</pre></td>
+  <td><pre>`Loaded ${n} rows`</pre></td>
+</tr>
+</table>
+<p>Backtick strings are called <em>template literals</em>. Note the <code>$</code> before the braces.</p>
+
+<h2 id="functions">Functions</h2>
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th></tr>
+<tr>
+<td><pre>def label_rows(
+    table: str,
+    count: int,
+) -> str:
+    return f"{table}: {count} rows"</pre></td>
+<td><pre>function labelRows(
+  table: string,
+  count: number,
+): string {
+  return `${table}: ${count} rows`;
+}</pre></td>
+</tr>
+</table>
+<ul>
+  <li><code>def name(...) -&gt; T:</code> becomes <code>function name(...): T { }</code></li>
+  <li>Braces <code>{ }</code> replace the colon + indentation. Indentation is convention only — the braces are what count.</li>
+  <li>Parameter annotations look identical: <code>name: type</code>.</li>
+  <li>Unlike Python hints, these annotations are <strong>checked</strong>: calling <code>labelRows(42, "users")</code> is a compile error.</li>
+</ul>
+
+<h2 id="arrays">Arrays (lists)</h2>
+<table>
+<tr><th>Concept</th><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th></tr>
+<tr><td>Type</td><td><code>list[str]</code></td><td><code>string[]</code> &nbsp;<em>(not <code>[string]</code> — that's a 1-tuple)</em></td></tr>
+<tr><td>Append</td><td><code>xs.append(x)</code></td><td><code>xs.push(x);</code></td></tr>
+<tr><td>Length</td><td><code>len(xs)</code></td><td><code>xs.length</code></td></tr>
+<tr><td>First / last</td><td><code>xs[0]</code> / <code>xs[-1]</code></td><td><code>xs[0]</code> / <code>xs.at(-1)</code> — <strong>no negative indexing</strong>; <code>xs[-1]</code> is <code>undefined</code></td></tr>
+</table>
+<div class="note"><code>const</code> arrays can still be mutated (<code>push</code> is fine) — <code>const</code> only stops re-pointing the name at a different array.</div>
+
+<h2 id="loops">Loops</h2>
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th></tr>
+<tr>
+<td><pre>for t in tables:
+    print(t)</pre></td>
+<td><pre>for (const t of tables) {
+  console.log(t);
+}</pre></td>
+</tr>
+</table>
+<div class="note"><strong>Trap:</strong> <code>for...in</code> exists but iterates <em>indices</em> ("0", "1", "2"), not values. Values = <code>of</code>.</div>
+
+<h2 id="records">Records (objects &amp; type aliases)</h2>
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th></tr>
+<tr>
+<td><pre>class TableSync(TypedDict):
+    table: str
+    rows_loaded: int
+    error: NotRequired[str]
+
+sync: TableSync = {
+    "table": "fact_orders",
+    "rows_loaded": 120_000,
+}
+print(sync["table"])</pre></td>
+<td><pre>type TableSync = {
+  table: string;
+  rowsLoaded: number;
+  error?: string;
+};
+
+const sync: TableSync = {
+  table: "fact_orders",
+  rowsLoaded: 120_000,
+};
+console.log(sync.table);</pre></td>
+</tr>
+</table>
+<ul>
+  <li>Objects = <strong>TypedDict, not dict</strong>: fixed known fields, dot access, typo-checked. Arbitrary-key dicts (<code>Record</code>/<code>Map</code>) come later.</li>
+  <li>Keys unquoted in literals; access with <code>sync.table</code>.</li>
+  <li>In <code>type</code> definitions: members end with <code>;</code>. In data literals: commas.</li>
+  <li><code>field?: T</code> = optional (≈ <code>NotRequired</code>). Reading it gives <code>T | undefined</code>.</li>
+  <li><code>TableSync[]</code> = an array of records — a typed result set.</li>
+  <li><code>interface</code> in the wild ≈ same job as <code>type</code> for object shapes.</li>
+</ul>
+
+<h2 id="builtins">Everyday built-ins</h2>
+<table>
+<tr><th><span class="pill py">Python</span></th><th><span class="pill ts">TypeScript</span></th><th>Notes</th></tr>
+<tr><td><code>print(x)</code></td><td><code>console.log(x)</code></td><td>Takes multiple args too: <code>console.log("rows:", n)</code></td></tr>
+<tr><td><code>len(xs)</code></td><td><code>xs.length</code></td><td>A property, not a function — no parentheses</td></tr>
+</table>
+
+<h2 id="inference">Type inference</h2>
+<pre>const tableName = "fact_orders";   // TS knows: string
+let batchSize = 500;               // TS knows: number
+batchSize = "big";                 // ❌ compile error</pre>
+<p>You rarely annotate local variables — TypeScript infers their types from the value. <strong>Annotate function parameters and return types; let inference handle the rest.</strong></p>
+
+<footer>
+Part of the TypeScript learning workspace · See also the <a href="glossary.html">glossary</a> · Sources: <a href="https://www.typescriptlang.org/docs/handbook/typescript-from-scratch.html">TS for the New Programmer</a>, <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html">Everyday Types</a>
+</footer>
+
+</body>
+</html>
