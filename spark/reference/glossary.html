@@ -20,6 +20,8 @@
     <a href="#task">Task</a><a href="#shuffle">Shuffle</a><a href="#narrow">Narrow transform</a>
     <a href="#wide">Wide transform</a><a href="#dag">DAG</a><a href="#catalyst">Catalyst</a>
     <a href="#plan">Query plan</a><a href="#aqe">AQE</a><a href="#slot">Slot / core</a>
+    <a href="#window-function">Window function</a><a href="#frame">Window frame</a>
+    <a href="#exchange">Exchange</a><a href="#cache">Cache / persist</a>
   </nav>
 </header>
 
@@ -126,13 +128,13 @@
     <dt>Catalyst <span class="tag">soon</span></dt>
     <dd>Spark SQL's query optimizer. It turns your DataFrame/SQL code into an optimized
     physical plan through a pipeline of rules (analysis → logical optimization → physical
-    planning). <em>Covered in Lesson 2.</em></dd>
+    planning). <em>Covered in Lesson 3.</em></dd>
   </div>
 
   <div class="term" id="plan">
     <dt>Query plan <span class="tag">soon</span></dt>
     <dd>The tree of operators Spark will execute, viewable with <code>df.explain()</code>.
-    Stages: unresolved → analyzed → optimized logical → physical. <em>Lesson 2.</em></dd>
+    Stages: unresolved → analyzed → optimized logical → physical. <em>Lesson 3.</em></dd>
   </div>
 
   <div class="term" id="aqe">
@@ -148,11 +150,55 @@
     <a class="xref" href="#task">task</a> at a time, so total concurrent tasks ≈ total
     slots. This caps real parallelism regardless of partition count.</dd>
   </div>
+
+  <div class="term" id="window-function">
+    <dt>Window function</dt>
+    <dd>Computes a value for <em>every</em> row using that row's partition-mates — defined by
+    <code>partitionBy</code> (which rows belong together), <code>orderBy</code> (their
+    sequence), and a <a class="xref" href="#frame">frame</a> (which of them feed this row's
+    value). Unlike <code>groupBy</code>, rows are not collapsed.
+    <span class="why">Engine cue: <code>partitionBy</code> keys are
+    <a class="xref" href="#shuffle">shuffle</a> keys — a window spec is a shuffle wearing
+    analytics clothing. Specs with identical keys can share one
+    <a class="xref" href="#exchange">exchange</a>.</span></dd>
+  </div>
+
+  <div class="term" id="frame">
+    <dt>Window frame</dt>
+    <dd>The slice of the (ordered) partition that feeds the current row's value — e.g.
+    <code>rowsBetween(unboundedPreceding, currentRow)</code> for a running total. Defaults when
+    omitted: no <code>orderBy</code> → the whole partition; with <code>orderBy</code> → a
+    growing <code>RANGE</code> frame up to the current row, <em>ties included as peers</em>.
+    <span class="why">Silent-bug source: the RANGE default pulls in all order-by ties at once.
+    State frames explicitly (<code>rowsBetween</code>) — say the frame you mean.</span></dd>
+  </div>
+
+  <div class="term" id="exchange">
+    <dt>Exchange</dt>
+    <dd>The physical operator that implements a <a class="xref" href="#shuffle">shuffle</a> —
+    what <code>df.explain()</code> and the Spark UI's SQL DAG show as
+    <code>Exchange hashpartitioning(keys, n)</code>. Several downstream operators needing the
+    same row distribution (e.g. two window specs with identical partition keys) can be fed by a
+    single exchange.
+    <span class="why">Counting exchanges in a plan = counting shuffles = counting stage
+    boundaries. Plan reading is Lesson 3.</span></dd>
+  </div>
+
+  <div class="term" id="cache">
+    <dt>Cache / persist</dt>
+    <dd><code>df.cache()</code> marks a DataFrame so its computed partitions are kept (memory,
+    spilling to disk) the first time an <a class="xref" href="#action">action</a> materializes
+    them; later actions reuse the stored partitions instead of replaying the whole lazy recipe.
+    Itself lazy — a marker, not an action. Release with <code>unpersist()</code>.
+    <span class="why">The cheapest fix for "one expensive lineage, many actions" — compute once,
+    then assert + check + write against the cached result.</span></dd>
+  </div>
 </dl>
 
 <footer>
-  Spark Engine course · Glossary v1 · started 2026-06-19. Definitions grounded in the
-  Apache Spark docs and <em>Learning Spark, 2nd Ed.</em> — see <code>RESOURCES.md</code>.
+  Spark Engine course · Glossary · started 2026-06-19 · updated 2026-07-27. Definitions
+  grounded in the Apache Spark docs and <em>Learning Spark, 2nd Ed.</em> — see
+  <code>RESOURCES.md</code>.
 </footer>
 </div>
 </body>

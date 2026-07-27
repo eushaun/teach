@@ -73,6 +73,36 @@ pre code{background:none; padding:0; font-size:1em;}
 .slots{display:flex; gap:.25rem; margin-top:.5rem;}
 .slots span{flex:1; height:.55rem; border-radius:3px; background:var(--accent); opacity:.7;}
 
+/* ---- number-line / layer diagram (.layerline) ----
+   Proportional segment bar for "ranges on a line" ideas: FIFO layers,
+   memory regions, partition ranges. Segments size via --w (units); states:
+   .full (survives), .gone (consumed), .part (split at --eat %). Optional
+   .ll-eat overlay bar (--pct) shows how far consumption reaches. */
+.layerline{margin:1.3rem 0; font-family:var(--sans);}
+.ll-eat{margin-bottom:.4rem;}
+.ll-eat i{display:block; height:.5rem; width:var(--pct); background:var(--bad);
+  opacity:.5; border-radius:3px;}
+.ll-eat b{display:block; font-size:.68rem; color:var(--bad); font-weight:700; margin-top:.15rem;}
+.ll-track{display:flex; gap:2px;}
+.ll-seg{flex:var(--w) 1 0; min-width:0; padding:.55rem .3rem; text-align:center;
+  font-size:.72rem; font-weight:700; border:1px solid var(--rule); border-radius:6px;
+  background:#fff; color:#333; white-space:nowrap; overflow:hidden;}
+.ll-seg.full{background:var(--good-bg); border-color:var(--good); color:var(--good);}
+.ll-seg.gone{background:var(--bad-bg); border-color:var(--bad); color:var(--bad);}
+.ll-seg.part{background:linear-gradient(90deg,var(--bad-bg) 0 var(--eat),var(--good-bg) var(--eat) 100%);
+  border-color:var(--good); color:#333;}
+.ll-cums{display:flex; gap:2px; margin-top:.2rem;}
+.ll-cums span{flex:var(--w) 1 0; min-width:0; text-align:center; font-family:var(--mono);
+  font-size:.64rem; color:var(--muted); white-space:nowrap; overflow:hidden;}
+.ll-legend{font-size:.7rem; color:var(--muted); margin-top:.45rem;}
+.ll-legend i{display:inline-block; width:.7rem; height:.7rem; border-radius:3px;
+  margin:0 .25rem 0 .7rem; vertical-align:-1px; border:1px solid var(--rule);}
+.ll-legend i:first-of-type{margin-left:0;}
+.ll-legend i.full{background:var(--good-bg); border-color:var(--good);}
+.ll-legend i.gone{background:var(--bad-bg); border-color:var(--bad);}
+.ll-legend i.part{background:linear-gradient(90deg,var(--bad-bg) 0 50%,var(--good-bg) 50% 100%);
+  border-color:var(--good);}
+
 /* ---- glossary (definition list) ---- */
 .toc{font-family:var(--sans); font-size:.82rem; display:flex; flex-wrap:wrap;
   gap:.4rem .9rem; margin:1.4rem 0 0;}

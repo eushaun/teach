@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 2 — FIFO in Window Functions</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">Lesson 2 · Spark Engine</p>
+  <h1>FIFO Without a Loop</h1>
+  <p class="sub">Reading <code>inventory-aging-fifo.py</code> — the pipeline you shipped today — the way
+  the engine reads it: one broadcast, one shuffle, two window operators, four actions.</p>
+</header>
+
+<div class="callout">
+  <span class="lbl">Why this lesson (your mission)</span>
+  <p>Today's material is <strong>your own production code</strong>:
+  <code>ltd-dbx-asset-bundle/pipelines/netsuite2/inventory-aging-fifo.py</code>. It decomposes
+  on-hand stock into surviving FIFO layers so merch can see what's been sitting 3+ months.
+  It works — now we make it <em>transparent</em>. Every Lesson&nbsp;1 concept (lazy eval, actions,
+  the shuffle boundary) shows up here with real money attached.</p>
+</div>
+
+<p>Your win for today: <strong>read the two <a class="xref" href="../reference/glossary.html#window-function">window</a>
+specs in <code>compute_fifo_layers</code> and predict the shuffle</strong> — where it happens, which
+keys it hashes on, and why there is only <em>one</em>. Plus: why a "loop" algorithm became four lines
+of set math, why a cross join didn't blow up, and what <code>.cache()</code> is quietly saving you.</p>
+
+<!-- ================= WARM-UP: L1 RECALL ================= -->
+<div class="ex">
+  <span class="tasklbl">Warm-up · Lesson 1 recall (90 seconds)</span>
+  <h3>Lazy, or runs now? Every line is from <em>your</em> pipeline.</h3>
+  <p class="hint">Lesson 1: transformations build the recipe; actions trigger a job.</p>
+  <div class="qz-classify" data-options="Lazy|Runs now">
+    <div class="qz-item" data-op=".where(quantity > 0)" data-answer="Lazy" data-why="Transformation — adds a step to the plan, executes nothing."></div>
+    <div class="qz-item" data-op=".crossJoin(df_as_of)" data-answer="Lazy" data-why="Even the ×23 expansion is only a plan until an action asks."></div>
+    <div class="qz-item" data-op=".count()" data-answer="Runs now" data-why="Action — asks for a number, triggers a job. Your identity check does this."></div>
+    <div class="qz-item" data-op=".cache()" data-answer="Lazy" data-why="Classic gotcha: cache() only MARKS the DataFrame. Nothing is stored until the first action."></div>
+    <div class="qz-item" data-op=".withColumn('cum_end', …)" data-answer="Lazy" data-why="Window math included — still just the recipe."></div>
+    <div class="qz-item" data-op="display(df_soft_check)" data-answer="Runs now" data-why="display() collects rows to show → action → job."></div>
+    <div class="qz-item" data-op=".saveAsTable(…)" data-answer="Runs now" data-why="The write is the action that pays for the whole pipeline."></div>
+  </div>
+</div>
+
+<h2><span class="n">1</span> The pipeline in one glance</h2>
+<p>Four moves, three functions, one gold table:</p>
+
+<div class="diagram">
+  <div class="node">
+    <div class="t">build_ledger</div>
+    <div class="d">3-way join over the netsuite2 silver tables, scoped to GL account 953 →
+    <strong>~340k rows</strong>: one signed movement each (+in / −out) across 3 warehouses.</div>
+  </div>
+  <div class="node">
+    <div class="t">build_as_of_dimension</div>
+    <div class="d"><strong>23 snapshot dates</strong> — every month-end since Sep 2024, plus today.
+    Grows by one per month.</div>
+  </div>
+  <div class="node">
+    <div class="t">compute_fifo_layers</div>
+    <div class="d">crossJoin ledger × dates, then <strong>two window functions</strong> turn the
+    movements into surviving FIFO layers per snapshot.</div>
+  </div>
+  <div class="node">
+    <div class="t">checks + write</div>
+    <div class="d"><strong>Four actions</strong> on the cached result: identity assert, QOH
+    comparison, PK assert, gold-table write.</div>
+  </div>
+</div>
+
+<p>Section 2 is the algorithm. Sections 3–5 are what the engine does with it — the part that
+was the black box.</p>
+
+<h2><span class="n">2</span> FIFO without a loop: the number line</h2>
+<p>Said aloud, FIFO aging is a loop: <em>"take the oldest receipt, subtract what's shipped,
+carry the remainder, move to the next…"</em>. Loops over rows don't distribute. Your pipeline
+never writes that loop — it restates the problem as <strong>set math</strong> the cluster can
+run on every (item, location, snapshot) at once.</p>
+
+<p>Put each item-location's <em>inflows</em> on a number line of cumulative units, oldest first.
+A layer received as <code>quantity</code> units occupies the interval
+<code>(cum_start, cum_end]</code>, where <code>cum_end</code> is the running sum of inflows up to
+and including it, and <code>cum_start = cum_end − quantity</code>. Because layers sit on the line
+in receipt order, FIFO consumption — whenever each shipment actually happened — always eats the
+line <strong>from unit 1 rightward</strong>. So by any snapshot date, only one number matters:
+<code>total_outflow</code>, how far the eating has reached.</p>
+
+<div class="layerline">
+  <div class="ll-eat" style="--pct:50%"><i></i><b>total_outflow = 60 units, eaten from the left</b></div>
+  <div class="ll-track">
+    <span class="ll-seg gone" style="--w:40">Jan · 40</span>
+    <span class="ll-seg part" style="--w:30; --eat:66.7%">Mar · 30</span>
+    <span class="ll-seg full" style="--w:50">May · 50</span>
+  </div>
+  <div class="ll-cums">
+    <span style="--w:40">(0, 40]</span>
+    <span style="--w:30">(40, 70]</span>
+    <span style="--w:50">(70, 120]</span>
+  </div>
+  <div class="ll-legend">Layer state:
+    <i class="gone"></i>consumed · <i class="part"></i>partial (survives 70−60 = 10) ·
+    <i class="full"></i>untouched
+  </div>
+</div>
+
+<p>A layer survives wherever the eating hasn't reached — the part of its interval to the right
+of <code>total_outflow</code>:</p>
+
+<pre><code>cum_start     = cum_end - quantity
+surviving_qty = greatest(                                  <span class="cmt"># clamp at 0</span>
+                  least(quantity,                          <span class="cmt"># clamp at full layer</span>
+                        cum_end - greatest(total_outflow, cum_start)),
+                  lit(0.0))</code></pre>
+
+<div class="keybox">
+  <p><strong>Three cases, one expression.</strong><br>
+  <strong>Untouched</strong> — <code>total_outflow ≤ cum_start</code> → survives <code>quantity</code>.<br>
+  <strong>Fully consumed</strong> — <code>total_outflow ≥ cum_end</code> → survives 0.<br>
+  <strong>Partial</strong> — in between → survives <code>cum_end − total_outflow</code>.<br>
+  No branching, no loop — the <code>greatest</code>/<code>least</code> clamps carve all three
+  cases out of the same subtraction.</p>
+</div>
+
+<div class="callout">
+  <span class="lbl">Algebra as QA</span>
+  <p>Summed over all layers of an (item, location):
+  Σ&nbsp;<code>surviving_qty</code> = total inflow − total outflow = <strong>the net ledger
+  sum</strong>. That identity is not a vibe check — it's a theorem about the formula. Your
+  pipeline runs it as a <em>hard assert</em> on every run. When you derive results with set
+  math, invariants like this come free; use them.</p>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise A · Walk the number line</span>
+  <h3>Three layers: 100, then 50, then 80 units (oldest → newest).</h3>
+  <div class="layerline">
+    <div class="ll-track">
+      <span class="ll-seg" style="--w:100">L1 · 100</span>
+      <span class="ll-seg" style="--w:50">L2 · 50</span>
+      <span class="ll-seg" style="--w:80">L3 · 80</span>
+    </div>
+    <div class="ll-cums">
+      <span style="--w:100">(0, 100]</span>
+      <span style="--w:50">(100, 150]</span>
+      <span style="--w:80">(150, 230]</span>
+    </div>
+  </div>
+  <p class="hint">Suppose <code>total_outflow = 120</code>. Predict before you click.</p>
+
+  <p class="sans" style="margin-bottom:.2rem; font-size:.9rem;"><strong>A1.</strong> How many units of <strong>L1</strong> survive?</p>
+  <div class="qz-reveal" data-answer="0">
+    <div class="qz-choices">
+      <button data-v="0">0</button>
+      <button data-v="20">20</button>
+      <button data-v="80">80</button>
+      <button data-v="100">100</button>
+    </div>
+    <div class="qz-explain"><strong>0.</strong> L1 spans (0, 100] and the eating reached 120 —
+    past its <code>cum_end</code>. <code>total_outflow ≥ cum_end</code> → fully consumed.</div>
+  </div>
+
+  <p class="sans" style="margin-bottom:.2rem; font-size:.9rem;"><strong>A2.</strong> How many units of <strong>L2</strong> survive?</p>
+  <div class="qz-reveal" data-answer="30">
+    <div class="qz-choices">
+      <button data-v="0">0</button>
+      <button data-v="20">20</button>
+      <button data-v="30">30</button>
+      <button data-v="50">50</button>
+    </div>
+    <div class="qz-explain"><strong>30.</strong> L2 spans (100, 150]; the eating reached 120,
+    inside the interval. Partial case: <code>cum_end − total_outflow</code> = 150 − 120 = 30.</div>
+  </div>
+
+  <p class="sans" style="margin-bottom:.2rem; font-size:.9rem;"><strong>A3.</strong> Total surviving across all three layers — <em>without</em> touching L3?</p>
+  <div class="qz-reveal" data-answer="110">
+    <div class="qz-choices">
+      <button data-v="90">90</button>
+      <button data-v="100">100</button>
+      <button data-v="110">110</button>
+      <button data-v="130">130</button>
+    </div>
+    <div class="qz-explain"><strong>110 — by the identity.</strong> Total inflow 230 − total
+    outflow 120 = 110. (Check: 0 + 30 + 80 = 110; L3 at (150, 230] is untouched.) This shortcut
+    <em>is</em> your pipeline's hard assert.</div>
+  </div>
+</div>
+
+<h2><span class="n">3</span> Two window specs, one shuffle</h2>
+<p>The formula needs two aggregates per row: a <em>running</em> inflow total
+(<code>cum_end</code>) and a <em>whole-partition</em> outflow total
+(<code>total_outflow</code>). Your pipeline builds them from two window specs:</p>
+
+<pre><code>w_partition = Window.partitionBy("item_id", "location_id", "as_of_date")
+
+w_cum = (
+    w_partition
+    .orderBy("trandate", "transaction_id", "transactionline_id")
+    .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+)
+
+df = (
+    df.withColumn("cum_end",
+        sum(when(col("quantity") &gt; 0, col("quantity")).otherwise(lit(0.0))).over(w_cum))
+      .withColumn("total_outflow",
+        sum(when(col("quantity") &lt; 0, abs(col("quantity"))).otherwise(lit(0.0))).over(w_partition))
+)</code></pre>
+
+<p>A <a class="xref" href="../reference/glossary.html#window-function">window function</a> computes
+a value for every row from that row's partition-mates.<sup><a href="#r3">3</a></sup> To do that,
+the engine must physically bring each partition's rows to one place — and "move rows so that
+keys meet" is exactly Lesson&nbsp;1's
+<a class="xref" href="../reference/glossary.html#shuffle">shuffle</a>.
+<strong><code>partitionBy</code> <em>is</em> the shuffle.</strong> In the physical plan it appears
+as an <a class="xref" href="../reference/glossary.html#exchange">exchange</a>:
+<code>Exchange hashpartitioning(item_id, location_id, as_of_date)</code>.</p>
+
+<p>The two specs then diverge on what happens <em>after</em> the rows land:</p>
+<ul>
+  <li><strong><code>w_cum</code> — ordered, explicit frame.</strong> <code>orderBy</code> adds a
+  sort-within-partition requirement, and
+  <code>rowsBetween(unboundedPreceding, currentRow)</code> makes the
+  <a class="xref" href="../reference/glossary.html#frame">frame</a> grow row by row — a running
+  total. Receipt order is what makes <code>cum_end</code> mean "units up to and including this
+  layer".</li>
+  <li><strong><code>w_partition</code> — no ordering, no frame.</strong> The documented default:
+  <em>"when ordering is not defined, an unbounded window frame … is used"</em><sup><a href="#r2">2</a></sup>
+  — i.e. the whole partition. Result: one total, repeated on every row. That's
+  <code>total_outflow</code>.</li>
+</ul>
+
+<div class="callout">
+  <span class="lbl">The frame default that bites</span>
+  <p>The other default matters more: <em>with</em> <code>orderBy</code> but <em>no</em> frame,
+  Spark uses a growing <code>RANGE</code> frame<sup><a href="#r2">2</a></sup> — and RANGE treats
+  order-by <strong>ties as peers</strong>, including them all at once. Here the ordering key is
+  the row's PK (unique), so RANGE would coincidentally match — but on a tied key (just
+  <code>trandate</code>, say) a running sum silently jumps by whole groups. Your pipeline's
+  explicit <code>rowsBetween</code> is the tie-proof habit: say the frame you mean.</p>
+</div>
+
+<p>Now the engine-lens punchline. Both specs name <strong>identical partition keys</strong>, so
+one exchange satisfies both: the planner hash-partitions once, sorts once (only
+<code>w_cum</code> asked for order), and stacks the two Window operators on top.<sup><a href="#r4">4</a></sup>
+Expect this shape in the SQL DAG:</p>
+
+<pre><code>Exchange hashpartitioning(item_id, location_id, as_of_date, 200)
+  Sort (trandate, transaction_id, transactionline_id)      <span class="cmt">← only w_cum needs this</span>
+    Window [sum(...) over w_cum]                            <span class="cmt">← running: cum_end</span>
+    Window [sum(...) over w_partition]                      <span class="cmt">← whole-partition: total_outflow</span></code></pre>
+
+<p>The match must be <em>exact</em>. A spec on <code>(item_id, location_id)</code> alone would
+<strong>not</strong> reuse this exchange — hashing on three keys doesn't co-locate rows by two —
+and you'd pay a second shuffle. One more reading detail: <code>total_outflow</code> is computed
+<em>while the outflow rows are still in the DataFrame</em>; only afterwards does
+<code>.where(quantity &gt; 0)</code> keep the inflow rows as layers. Filter first and the
+outflows would vanish from the sum — order of transformations is part of the algorithm.</p>
+
+<div class="ex">
+  <span class="tasklbl">Exercise B · Find the shuffle</span>
+  <h3>Click the line that decides which executor every row is sent to.</h3>
+  <div class="qz-pick" data-wrong="✗ Not that one — that line shapes what happens within a partition after the shuffle has already delivered the rows (ordering, frame, or consuming the spec). Which line names the keys rows are hashed by?">
+    <span class="qz-line" data-correct="true"
+          data-feedback="✓ Yes. partitionBy names the shuffle keys — the exchange hashes (item_id, location_id, as_of_date) to route each row to its partition. Everything else on this screen happens after the rows have landed.">w_partition = Window.partitionBy("item_id", "location_id", "as_of_date")</span>
+    <span class="qz-line" data-correct="false">w_cum = (w_partition</span>
+    <span class="qz-line" data-correct="false">    .orderBy("trandate", "transaction_id", "transactionline_id")</span>
+    <span class="qz-line" data-correct="false">    .rowsBetween(Window.unboundedPreceding, Window.currentRow))</span>
+    <span class="qz-line" data-correct="false">cum_end       = sum(inflow_qty).over(w_cum)</span>
+    <span class="qz-line" data-correct="false">total_outflow = sum(outflow_qty).over(w_partition)</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise C · Know your specs</span>
+  <h3>Which spec does each statement describe?</h3>
+  <p class="hint">From memory — scroll away from the code first.</p>
+  <div class="qz-classify" data-options="w_cum|w_partition|Both">
+    <div class="qz-item" data-op="adds a sort requirement" data-answer="w_cum" data-why="orderBy forces a per-partition sort after the shuffle. w_partition never asks."></div>
+    <div class="qz-item" data-op="frame defaults to the whole partition" data-answer="w_partition" data-why="No orderBy → unbounded default frame → one aggregate over everything."></div>
+    <div class="qz-item" data-op="requires the hash exchange" data-answer="Both" data-why="Both need rows co-located by (item, location, as_of) — same keys, so ONE exchange serves both."></div>
+    <div class="qz-item" data-op="value changes row by row" data-answer="w_cum" data-why="The growing ROWS frame makes it a running total — that's cum_end."></div>
+    <div class="qz-item" data-op="same value on every row" data-answer="w_partition" data-why="Whole-partition aggregate, repeated per row — that's total_outflow."></div>
+    <div class="qz-item" data-op="states its frame explicitly" data-answer="w_cum" data-why="rowsBetween(unboundedPreceding, currentRow) — tie-proof, intent on the page."></div>
+  </div>
+</div>
+
+<h2><span class="n">4</span> The ×23 that costs almost nothing</h2>
+<p>Before the windows, the pipeline does something that <em>sounds</em> alarming:</p>
+<pre><code>df = df_ledger.crossJoin(df_as_of).where(col("trandate") &lt;= col("as_of_date"))</code></pre>
+<p>A cross join! But look at the sizes. The as-of dimension is <strong>23 rows</strong>. Spark
+handles a join with a tiny side by <strong>broadcasting</strong> it — shipping the 23 rows to
+every executor once, then expanding each ledger row locally (a
+<code>BroadcastNestedLoopJoin</code>).<sup><a href="#r6">6</a></sup> No rows are redistributed,
+so: <strong>no shuffle, no stage boundary</strong>. The scary word and the expensive operation
+are not the same thing.</p>
+<p>The real cost is row multiplication: ~340k × 23 ≈ 8M rows (the
+<code>trandate ≤ as_of_date</code> filter then trims older snapshots' futures away). That
+inflated set is what flows into the window exchange — and it's a price paid <em>on purpose</em>:
+putting <code>as_of_date</code> into the partition keys is what makes all 23 snapshots' FIFO
+walks independent, so the cluster computes two years of month-ends in one pass instead of 23
+job runs.</p>
+<div class="callout">
+  <span class="lbl">Small print from Lesson 1</span>
+  <p>Building that dimension does <code>UNION … .distinct()</code> — and <code>distinct</code>
+  is a wide transformation, so yes, there's technically a shuffle there… of 23 rows.
+  <strong>Shuffle <em>size</em> is the cost, not the word "shuffle".</strong> Reserve your alarm
+  for exchanges moving millions of rows.</p>
+</div>
+
+<h2><span class="n">5</span> One cache, four actions</h2>
+<p>The build cell ends with:</p>
+<pre><code>df_gold = compute_fifo_layers(df_ledger, df_as_of, AGING_THRESHOLD_MONTHS).cache()</code></pre>
+<p>Then four separate cells consume <code>df_gold</code>: the identity assert
+(<code>.count()</code>), the soft QOH comparison (<code>display()</code>), the PK-uniqueness
+assert (<code>.count()</code>), and the gold write (<code>saveAsTable</code>). Lesson&nbsp;1's
+lazy evaluation has a sharp edge here: a DataFrame is a <em>recipe</em>, not a result. Without
+<a class="xref" href="../reference/glossary.html#cache">cache</a>, <strong>each</strong> of those
+four actions would replay the entire lineage — three-table join, broadcast expansion, the
+shuffle, the sort, both windows — from the silver tables.</p>
+<p>With <code>.cache()</code>, the first action materializes the partitions (memory, spilling
+to disk if needed<sup><a href="#r5">5</a></sup>) and the other three read them back. Remember the
+warm-up: <code>cache()</code> itself is lazy — a marker, not an action. And the pipeline's last
+line, <code>df_gold.unpersist()</code>, hands the memory back when the work is done. Marker on,
+work, marker off: the cheapest real tuning lever in this file.</p>
+
+<div class="ex">
+  <span class="tasklbl">Exercise D · Count the replays</span>
+  <h3>Delete <code>.cache()</code>. On a clean run (asserts pass), how many times does the engine
+  execute the full recipe — join → ×23 → shuffle → two windows?</h3>
+  <div class="qz-reveal" data-answer="4">
+    <div class="qz-choices">
+      <button data-v="1">1</button>
+      <button data-v="2">2</button>
+      <button data-v="4">4</button>
+      <button data-v="5">5</button>
+    </div>
+    <div class="qz-explain"><strong>4</strong> — one replay per action: identity
+    <code>count()</code>, soft-check <code>display()</code>, PK <code>count()</code>,
+    <code>saveAsTable()</code>. (5 would be right on a <em>failing</em> run — the conditional
+    <code>display(identity_mismatches)</code> is a fifth action that only fires on mismatch.)
+    Homework to chew on: <code>df_ledger</code> is consumed twice — by the gold build <em>and</em>
+    by the identity check's net-ledger sum — and it isn't cached. Worth it? Bring me your answer.</div>
+  </div>
+</div>
+
+<h2><span class="n">6</span> What you can now predict</h2>
+<p>Next time the netsuite2 job runs this task, you can call the plan before opening it:</p>
+<ul>
+  <li><strong>No panic at <code>crossJoin</code>:</strong> a 23-row side means broadcast — no
+  exchange, no stage boundary.</li>
+  <li><strong>One exchange for both windows:</strong>
+  <code>hashpartitioning(item_id, location_id, as_of_date)</code>, one sort (owned by
+  <code>w_cum</code>), two Window operators. If you ever see two exchanges stacked here, a spec's
+  keys drifted.</li>
+  <li><strong>Four actions, one computation:</strong> <code>.cache()</code> is why the three
+  checks are near-free instead of tripling the runtime.</li>
+</ul>
+<p>That's the mission loop closing: <em>predict → verify → tune</em>. Lesson 3 gives you the
+verification tool — Catalyst and <code>df.explain()</code> — and we'll aim it at this very file
+to check today's predictions against the real plan.</p>
+
+<div class="callout">
+  <span class="lbl">Primary source — read this next</span>
+  <p>📘 The <a href="https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-window.html">Spark
+  SQL Window Functions reference</a><sup><a href="#r1">1</a></sup> (15 minutes), then the classic
+  Databricks post <a href="https://www.databricks.com/blog/2015/07/15/introducing-window-functions-in-spark-sql.html"><em>Introducing
+  Window Functions in Spark SQL</em></a><sup><a href="#r3">3</a></sup> for the ROWS-vs-RANGE frame
+  pictures. Going deeper on the physical side: the
+  <a href="https://books.japila.pl/spark-sql-internals/physical-operators/WindowExec/">WindowExec</a>
+  chapter of Laskowski's <em>Internals of Spark SQL</em>.<sup><a href="#r4">4</a></sup></p>
+</div>
+
+<div class="callout">
+  <span class="lbl">Your teacher is one message away</span>
+  <p>If anything is fuzzy — "why does RANGE include ties?", "how does the broadcast actually get
+  to executors?", "should I cache <code>df_ledger</code> too?" — ask me right now in the chat.
+  The homework question in Exercise D is a real one; I want your reasoning, not the answer.</p>
+</div>
+
+<div class="refs">
+  <strong>References</strong>
+  <ol>
+    <li id="r1">Apache Spark — SQL Reference: Window Functions.
+      <a href="https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-window.html">spark.apache.org</a></li>
+    <li id="r2">PySpark API — <code>pyspark.sql.Window</code>: "When ordering is not defined, an
+      unbounded window frame … is used by default. When ordering is defined, a growing window
+      frame (rangeFrame, unboundedPreceding, currentRow) is used by default."
+      <a href="https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.Window.html">spark.apache.org</a></li>
+    <li id="r3">Databricks Engineering — <em>Introducing Window Functions in Spark SQL</em> (2015):
+      window spec anatomy; ROWS vs RANGE frames.
+      <a href="https://www.databricks.com/blog/2015/07/15/introducing-window-functions-in-spark-sql.html">databricks.com</a></li>
+    <li id="r4">Jacek Laskowski — <em>The Internals of Spark SQL</em>: WindowExec physical operator
+      (exchange + sort feeding window execution).
+      <a href="https://books.japila.pl/spark-sql-internals/physical-operators/WindowExec/">books.japila.pl</a></li>
+    <li id="r5"><em>Learning Spark, 2nd Edition</em>, Damji et al. — ch. 7, caching &amp; persistence
+      of DataFrames.
+      <a href="https://pages.databricks.com/202003-US-EB-Learning-Spark-2nd-Edition_Thank-you-ebook.html">databricks.com</a></li>
+    <li id="r6">Apache Spark — SQL Performance Tuning: broadcast joins &amp; join strategy hints.
+      <a href="https://spark.apache.org/docs/latest/sql-performance-tuning.html">spark.apache.org</a></li>
+  </ol>
+  See also the course <a href="../reference/glossary.html">Glossary</a> and <code>RESOURCES.md</code>.
+</div>
+
+<div class="nav">
+  <a href="0001-the-execution-model.html">← Lesson 1 · The Execution Model</a>
+  <span class="next">Next: Lesson 3 · Catalyst &amp; <code>df.explain()</code> — verify today's predicted plan</span>
+</div>
+
+</div>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

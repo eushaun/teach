@@ -25,6 +25,12 @@ Format per entry: **Title** — type · why it's trusted · what it's good for �
     `https://spark.apache.org/docs/latest/web-ui.html`
   - SQL Performance Tuning (AQE, joins, partitions, caching) ·
     `https://spark.apache.org/docs/latest/sql-performance-tuning.html`
+  - SQL Reference: Window Functions (syntax, function classes, frame clause) ·
+    `https://spark.apache.org/docs/latest/sql-ref-syntax-qry-select-window.html`
+  - PySpark API: `pyspark.sql.Window` (the authoritative default-frame rules — unbounded
+    frame without ordering, growing RANGE frame with ordering; verified against the class
+    docstring in the Spark source) ·
+    `https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/api/pyspark.sql.Window.html`
 
 - **The Internals of Spark Core** (Jacek Laskowski) — online book · maintained by a
   long-time Spark/Databricks specialist · deepest free dive into the scheduler, DAG,
@@ -49,6 +55,11 @@ Format per entry: **Title** — type · why it's trusted · what it's good for �
   on the Catalyst pipeline ·
   `https://www.unraveldata.com/resources/catalyst-analyst-a-deep-dive-into-sparks-optimizer`
 
+- **Databricks: Introducing Window Functions in Spark SQL** (2015) — vendor engineering
+  blog · the canonical intro to window specs; best pictures of ROWS vs RANGE frames ·
+  used in lesson 0002 ·
+  `https://www.databricks.com/blog/2015/07/15/introducing-window-functions-in-spark-sql.html`
+
 ## Communities — for wisdom (testing skills in the real world)
 
 - **Databricks Community** (data engineering forum) — practitioners on the same platform ·
@@ -59,4 +70,4 @@ Format per entry: **Title** — type · why it's trusted · what it's good for �
   questions · `https://stackoverflow.com/questions/tagged/apache-spark`
 
 ---
-_Last updated: 2026-06-19. Never trust parametric knowledge — verify claims against these._
+_Last updated: 2026-07-27. Never trust parametric knowledge — verify claims against these._
