@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Glossary — PBIP / TMDL / PBIR</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <p class="kicker">Reference · PBIP / TMDL / PBIR</p>
+  <h1>Glossary</h1>
+  <p class="lede">The canonical vocabulary for this course. Lessons link here; meanings stay
+  consistent across every lesson. Forward-referenced terms are marked <span class="tag" style="position:static">soon</span>.</p>
+  <nav class="toc">
+    <a href="#pbip">PBIP</a><a href="#pbix">PBIX</a><a href="#semantic-model">Semantic model</a>
+    <a href="#report-item">Report (item)</a><a href="#tmdl">TMDL</a><a href="#tmsl">TMSL / model.bim</a>
+    <a href="#pbir">PBIR</a><a href="#pbir-legacy">PBIR-Legacy</a>
+    <a href="#definition-pbir">definition.pbir</a><a href="#definition-pbism">definition.pbism</a>
+    <a href="#thick">Thick report</a><a href="#thin">Thin report</a>
+    <a href="#platform">.platform / logicalId</a><a href="#lineagetag">lineageTag</a>
+    <a href="#visual-json">visual.json</a><a href="#page-json">page.json / pages.json</a>
+    <a href="#report-extensions">reportExtensions.json</a><a href="#static-resources">StaticResources</a>
+    <a href="#partition">Partition (model)</a><a href="#ref">ref (TMDL)</a>
+    <a href="#tom">TOM</a><a href="#pbi-cache">.pbi / cache.abf</a><a href="#fabric-cicd">fabric-cicd</a>
+  </nav>
+</header>
+
+<dl>
+  <div class="term" id="pbip">
+    <dt>PBIP (Power BI Project)</dt>
+    <dd>A report + semantic model saved as a <em>folder of plain-text files</em> instead of
+    a single binary. The <code>&lt;name&gt;.pbip</code> file itself is just a tiny JSON
+    pointer to the report folder; the substance lives in the
+    <a class="xref" href="#semantic-model">*.SemanticModel</a> and
+    <a class="xref" href="#report-item">*.Report</a> folders next to it.
+    <span class="why">Review cue: "the PBIP" = the whole folder tree, and it is exactly what
+    lives under <code>powerbi-pbip/reports/&lt;Workspace&gt;/&lt;Project&gt;/</code>.</span></dd>
+  </div>
+
+  <div class="term" id="pbix">
+    <dt>PBIX</dt>
+    <dd>The classic single-file format: a zip archive containing the same report + model
+    metadata (in older, undocumented encodings) <em>plus the imported data cache</em>.
+    Fine for Desktop, opaque to git — you can't diff or merge it.
+    <span class="why">Everything you built in PBIX still exists in PBIP — it's the same
+    objects, spelled out in text.</span></dd>
+  </div>
+
+  <div class="term" id="semantic-model">
+    <dt>Semantic model (<code>*.SemanticModel</code> folder)</dt>
+    <dd>The "dataset": tables, columns, partitions (with their M), relationships, measures,
+    roles, cultures. In our projects it's serialized as
+    <a class="xref" href="#tmdl">TMDL</a> under <code>definition\</code>.
+    <span class="why">Model view + the fields pane, as files.</span></dd>
+  </div>
+
+  <div class="term" id="report-item">
+    <dt>Report (<code>*.Report</code> folder)</dt>
+    <dd>The visual layer: pages, visuals, bookmarks, themes, report/page/visual-level
+    filters and formatting. Serialized as <a class="xref" href="#pbir">PBIR</a> JSON under
+    <code>definition\</code>.
+    <span class="why">The report canvas, as files — one folder per page, one per visual.</span></dd>
+  </div>
+
+  <div class="term" id="tmdl">
+    <dt>TMDL (Tabular Model Definition Language)</dt>
+    <dd>Indentation-based text language for tabular models. Objects declare children by
+    nesting (a <code>measure</code> under a <code>table</code>); <code>=</code> introduces an
+    expression (DAX/M, read verbatim), <code>:</code> introduces a plain property
+    (<code>formatString: #,0</code>). On disk: tab-indented, one file per table.
+    <span class="why">Review cue: the DAX after <code>=</code> is exactly what you'd type in
+    Desktop's formula bar — nothing is re-encoded.</span></dd>
+  </div>
+
+  <div class="term" id="tmsl">
+    <dt>TMSL / model.bim</dt>
+    <dd>The older JSON serialization of the same tabular model, stored as one giant
+    <code>model.bim</code> file. A project uses TMDL <em>or</em> TMSL, never both.
+    <span class="why">You'll only meet it in legacy exports; our repo is all-TMDL.</span></dd>
+  </div>
+
+  <div class="term" id="pbir">
+    <dt>PBIR (Power BI Enhanced Report format)</dt>
+    <dd>The source-control-friendly report format: properly formatted JSON, one file per
+    page/visual/bookmark, each with a public <code>$schema</code>. Designed for diffs,
+    merges, and programmatic edits.
+    <span class="why">Every report in our repo is PBIR — it's what makes agent edits
+    reviewable at all.</span></dd>
+  </div>
+
+  <div class="term" id="pbir-legacy">
+    <dt>PBIR-Legacy (report.json)</dt>
+    <dd>The predecessor: the whole report crammed into a single undocumented
+    <code>report.json</code>. Doesn't support external editing.
+    <span class="why">If you ever see one <code>report.json</code> instead of a
+    <code>definition\</code> folder, the report hasn't been converted to PBIR.</span></dd>
+  </div>
+
+  <div class="term" id="definition-pbir">
+    <dt>definition.pbir</dt>
+    <dd>The report folder's core file. Its <code>datasetReference</code> says which model
+    the report runs on: <code>byPath</code> (relative path to a local
+    <code>*.SemanticModel</code>) or <code>byConnection</code> (connection string to a
+    published model in the Service).
+    <span class="why">This one file decides <a class="xref" href="#thick">thick</a> vs
+    <a class="xref" href="#thin">thin</a> — and rebinding a report = editing it.</span></dd>
+  </div>
+
+  <div class="term" id="definition-pbism">
+    <dt>definition.pbism</dt>
+    <dd>The semantic model folder's core file: format version + core settings. Version 4.0+
+    permits TMDL; the file is otherwise boring.
+    <span class="why">Don't confuse the pair: <code>.pbir</code> = <b>r</b>eport,
+    <code>.pbism</code> = <b>s</b>emantic <b>m</b>odel.</span></dd>
+  </div>
+
+  <div class="term" id="thick">
+    <dt>Thick report (byPath)</dt>
+    <dd>Report + its own model in one project; <code>definition.pbir</code> points
+    <code>byPath</code> at the sibling <code>*.SemanticModel</code>. Opening it in Desktop
+    opens both for editing.
+    <span class="why">Our specimen: <em>EMEA Performance Dashboard</em>. A PR here can
+    legitimately touch both folders.</span></dd>
+  </div>
+
+  <div class="term" id="thin">
+    <dt>Thin report (byConnection)</dt>
+    <dd>Report only; <code>definition.pbir</code> carries a connection string
+    (<code>semanticmodelid=…</code>) to a shared model published in the Service. There is
+    <em>no local model folder</em>.
+    <span class="why">Our specimen: <em>Weekly Sales Summary</em> → the shared
+    <em>Sales Reports</em> model. A "measure fix" PR for a thin report must land in the
+    shared model's project instead.</span></dd>
+  </div>
+
+  <div class="term" id="platform">
+    <dt>.platform / logicalId</dt>
+    <dd>Fabric's git-integration identity file: item type, display name, and a
+    <code>logicalId</code> GUID that ties the folder to a Service item. One per
+    <code>*.Report</code> and <code>*.SemanticModel</code>.
+    <span class="why">Duplicate logicalIds (e.g. a stray <code>.bak</code> copy) hard-fail
+    deploys; display names are load-bearing for fabric-cicd matching. Diffs here are rare
+    and worth a close look.</span></dd>
+  </div>
+
+  <div class="term" id="lineagetag">
+    <dt>lineageTag</dt>
+    <dd>A stable GUID stamped on model objects (tables, columns, measures) so tooling can
+    track identity across renames and deployments.
+    <span class="why">Pure noise when <em>reading</em> a diff — but additions should come
+    with one, and they must stay unique.</span></dd>
+  </div>
+
+  <div class="term" id="visual-json">
+    <dt>visual.json</dt>
+    <dd>One visual, one file: its <code>name</code>, <code>position</code> (x/y/z,
+    width/height), <code>visualType</code>, <code>query</code> (which fields/measures it
+    projects) and <code>objects</code> (formatting overrides).
+    <span class="why">The three questions of any visual diff: moved? re-bound? re-styled?
+    — map to exactly those three blocks.</span></dd>
+  </div>
+
+  <div class="term" id="page-json">
+    <dt>page.json / pages.json</dt>
+    <dd><code>page.json</code> (one per page folder) holds page size, page-level filters and
+    formatting; <code>pages.json</code> (one per report) holds page order + active page.
+    <span class="why">A visual "disappearing" in a PR is as likely a pages.json ordering /
+    page.json filter change as a deleted visual folder.</span></dd>
+  </div>
+
+  <div class="term" id="report-extensions">
+    <dt>reportExtensions.json <span class="tag" style="position:static">soon</span></dt>
+    <dd>Report-<em>scoped</em> extensions — most notably report-level measures that live in
+    the report, not the model.
+    <span class="why">The one legitimate way DAX can hide inside a thin report's PR.</span></dd>
+  </div>
+
+  <div class="term" id="static-resources">
+    <dt>StaticResources / RegisteredResources</dt>
+    <dd>Report-local resource files: the applied theme JSON (ours:
+    <code>LTDBrand.json</code>), base themes, images.
+    <span class="why">Brand-wide look changes should land here (or in the _template), not as
+    per-visual <code>objects</code> overrides.</span></dd>
+  </div>
+
+  <div class="term" id="partition">
+    <dt>Partition (model) <span class="tag" style="position:static">soon</span></dt>
+    <dd>The part of a table's TMDL that says where its data comes from — for us an M
+    (Power Query) expression querying Databricks <code>dwh</code>, declared as
+    <code>partition X = m</code> with the M after <code>source =</code>.
+    <span class="why">A partition diff = "the data feeding this table changed" — highest
+    review priority in any model PR.</span></dd>
+  </div>
+
+  <div class="term" id="ref">
+    <dt>ref (TMDL keyword)</dt>
+    <dd>Ordering declarations in <code>model.tmdl</code> (<code>ref table Sales</code>…)
+    that preserve collection order across serialization round-trips.
+    <span class="why">A reshuffled ref block is usually serializer churn, not a semantic
+    change — but a <em>new</em> ref means a new table/culture/role exists.</span></dd>
+  </div>
+
+  <div class="term" id="tom">
+    <dt>TOM (Tabular Object Model) <span class="tag" style="position:static">soon</span></dt>
+    <dd>The .NET client API for tabular models. The live-model route: the
+    <code>powerbi-modeling</code> MCP and <code>connect-pbid</code> talk TOM to a running
+    Desktop's local Analysis Services instance instead of editing files.
+    <span class="why">Two routes, one truth: live TOM edits and on-disk TMDL edits must not
+    fight — never let Desktop save over hand-authored TMDL.</span></dd>
+  </div>
+
+  <div class="term" id="pbi-cache">
+    <dt>.pbi\ / cache.abf / localSettings.json</dt>
+    <dd>Machine-local plumbing: <code>cache.abf</code> is the imported data cache,
+    <code>localSettings.json</code> per-machine settings. Gitignored by the default PBIP
+    <code>.gitignore</code>.
+    <span class="why">If these show up in a diff, something's wrong with the
+    .gitignore — they never belong in a PR.</span></dd>
+  </div>
+
+  <div class="term" id="fabric-cicd">
+    <dt>fabric-cicd <span class="tag" style="position:static">soon</span></dt>
+    <dd>Microsoft's Python library that publishes PBIP folders to a Fabric/Power BI
+    workspace — the engine inside our <code>deploy/</code> tooling. Matches items by
+    display name + type.
+    <span class="why">Why "merging to main IS the prod deploy," and why renames create
+    duplicates instead of renaming.</span></dd>
+  </div>
+</dl>
+
+<div class="nav">
+  <a href="../lessons/0001-anatomy-of-a-pbip-project.html">← Lesson 1</a>
+  <a href="pbip-file-map.html">File map →</a>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PBIP File Map — what every file is, and how hard to look at it in a PR</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/tables.css">
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <p class="kicker">Reference · PBIP / TMDL / PBIR</p>
+  <h1>The PBIP File Map</h1>
+  <p class="lede">Every file in a project, what it is, and how much attention it deserves in
+  an agent's PR. Print-friendly — keep it beside the diff. Badges:
+  <span class="b b-read">read</span> = read every changed line ·
+  <span class="b b-glance">glance</span> = confirm it's the change you expected ·
+  <span class="b b-noise">noise</span> = churn/plumbing, skip unless surprising.</p>
+</header>
+
+<h2>Top level — <code>reports/&lt;Workspace&gt;/&lt;Project&gt;/</code></h2>
+<table class="ref">
+  <thead><tr><th>File / folder</th><th>What it is</th><th>In a diff</th></tr></thead>
+  <tbody>
+    <tr><td class="file">&lt;name&gt;.pbip</td>
+        <td>Tiny JSON pointer to the report folder. Open this to open the project in Desktop.</td>
+        <td><span class="b b-noise">noise</span></td></tr>
+    <tr><td class="file">&lt;name&gt;.SemanticModel\</td>
+        <td>The model item — tables, partitions (M), relationships, measures. <a class="xref" href="glossary.html#semantic-model">glossary</a></td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file">&lt;name&gt;.Report\</td>
+        <td>The report item — pages, visuals, bookmarks, theme. <a class="xref" href="glossary.html#report-item">glossary</a></td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file">.gitignore</td>
+        <td>Excludes <code>.pbi\cache.abf</code> + <code>localSettings.json</code>. Desktop creates it once.</td>
+        <td><span class="b b-glance">glance</span></td></tr>
+  </tbody>
+</table>
+
+<h2><code>*.SemanticModel\</code> — the model, in TMDL</h2>
+<table class="ref">
+  <thead><tr><th>File / folder</th><th>What it is</th><th>In a diff</th></tr></thead>
+  <tbody>
+    <tr><td class="file">definition\</td>
+        <td>The whole model as <a class="xref" href="glossary.html#tmdl">TMDL</a>. This folder <em>is</em> the model.</td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file in1">definition\tables\&lt;Table&gt;.tmdl</td>
+        <td>One file per table: columns, <a class="xref" href="glossary.html#partition">partition M</a>, measures, hierarchies, annotations. Measures live in whichever table hosts them (ours: <code>Measures - *</code> tables).</td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file in1">definition\relationships.tmdl</td>
+        <td>All relationships: endpoints, cardinality, direction, active flag.</td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file in1">definition\model.tmdl</td>
+        <td>Model-level properties, shared expressions (parameters), <a class="xref" href="glossary.html#ref">ref ordering</a> of tables/roles/cultures, annotations.</td>
+        <td><span class="b b-glance">glance</span></td></tr>
+    <tr><td class="file in1">definition\database.tmdl</td>
+        <td>Compatibility level. Rarely changes.</td>
+        <td><span class="b b-glance">glance</span></td></tr>
+    <tr><td class="file in1">definition\cultures\*.tmdl</td>
+        <td>Linguistic metadata (Q&amp;A schema). Desktop-generated churn magnet.</td>
+        <td><span class="b b-noise">noise</span></td></tr>
+    <tr><td class="file in1">definition\roles\*.tmdl</td>
+        <td>RLS roles + DAX filters (when present).</td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file">definition.pbism</td>
+        <td>Core settings + format version (4.0+ ⇒ TMDL allowed). <a class="xref" href="glossary.html#definition-pbism">glossary</a></td>
+        <td><span class="b b-glance">glance</span></td></tr>
+    <tr><td class="file">.platform</td>
+        <td>Fabric git identity: type, display name, <a class="xref" href="glossary.html#platform">logicalId</a>. Display names are load-bearing for deploys; duplicate logicalIds hard-fail.</td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file">diagramLayout.json</td>
+        <td>Model-view diagram positions. Cosmetic.</td>
+        <td><span class="b b-noise">noise</span></td></tr>
+    <tr><td class="file">.pbi\ (cache.abf, localSettings.json)</td>
+        <td>Machine-local cache/settings — gitignored; must never appear in a PR.</td>
+        <td><span class="b b-noise">noise</span></td></tr>
+  </tbody>
+</table>
+
+<h2><code>*.Report\</code> — the report, in PBIR</h2>
+<table class="ref">
+  <thead><tr><th>File / folder</th><th>What it is</th><th>In a diff</th></tr></thead>
+  <tbody>
+    <tr><td class="file">definition.pbir</td>
+        <td>Core report file; <code>datasetReference</code> = <code>byPath</code> (thick) or <code>byConnection</code> (thin). Rebinding = editing this. <a class="xref" href="glossary.html#definition-pbir">glossary</a></td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file">definition\report.json</td>
+        <td>Report-level filters, formatting, settings.</td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file">definition\version.json</td>
+        <td>PBIR format version.</td>
+        <td><span class="b b-glance">glance</span></td></tr>
+    <tr><td class="file">definition\reportExtensions.json</td>
+        <td>Report-level measures — the one place DAX hides <em>inside a report</em>. <a class="xref" href="glossary.html#report-extensions">glossary</a></td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file">definition\pages\pages.json</td>
+        <td>Page order + active (landing) page.</td>
+        <td><span class="b b-glance">glance</span></td></tr>
+    <tr><td class="file in1">pages\&lt;Page&gt;\page.json</td>
+        <td>One page: size, page-level filters, formatting.</td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file in2">…\visuals\&lt;Visual&gt;\visual.json</td>
+        <td>One visual: <code>position</code> / <code>query</code> (field bindings) / <code>objects</code> (formatting) / visual-level filters. <a class="xref" href="glossary.html#visual-json">glossary</a></td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file in2">…\visuals\&lt;Visual&gt;\mobile.json</td>
+        <td>That visual's mobile-layout overrides.</td>
+        <td><span class="b b-glance">glance</span></td></tr>
+    <tr><td class="file">definition\bookmarks\*.bookmark.json</td>
+        <td>Bookmarks: captured filter/visual state (+ <code>bookmarks.json</code> for order/groups). Can embed data values.</td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file">StaticResources\RegisteredResources\</td>
+        <td>Applied theme (ours: <code>LTDBrand.json</code>), images. Brand look lives here, not in per-visual overrides.</td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file">StaticResources\SharedResources\BaseThemes\</td>
+        <td>Desktop's built-in base theme snapshot (e.g. <code>CY23SU04.json</code>).</td>
+        <td><span class="b b-noise">noise</span></td></tr>
+    <tr><td class="file">semanticModelDiagramLayout.json</td>
+        <td>Diagram metadata mirrored on the report side.</td>
+        <td><span class="b b-noise">noise</span></td></tr>
+    <tr><td class="file">mobileState.json</td>
+        <td>Report-level mobile rendering state. No external editing.</td>
+        <td><span class="b b-noise">noise</span></td></tr>
+    <tr><td class="file">.platform</td>
+        <td>Same role as the model's — identity + display name.</td>
+        <td><span class="b b-read">read</span></td></tr>
+    <tr><td class="file">CustomVisuals\</td>
+        <td>Imported custom visuals (when present, e.g. Deneb).</td>
+        <td><span class="b b-glance">glance</span></td></tr>
+  </tbody>
+</table>
+
+<h2>Who writes these files — your agent's toolbox → layer</h2>
+<table class="ref">
+  <thead><tr><th>Layer</th><th>Skills / MCPs / tools the agent uses</th><th>How the edit lands</th></tr></thead>
+  <tbody>
+    <tr><td class="file">*.SemanticModel (TMDL)</td>
+        <td><code>pbip:tmdl</code> (file authoring) · <code>semantic-models:semantic-model</code>, <code>:dax</code>, <code>:power-query</code> · <code>tabular-editor:te-cli</code></td>
+        <td>Direct text edits to <code>definition\*.tmdl</code> — visible verbatim in the diff.</td></tr>
+    <tr><td class="file">Live model (running Desktop)</td>
+        <td><strong>powerbi-modeling MCP</strong> (measure/column/table/relationship/partition ops) · <code>pbi-desktop:connect-pbid</code> (TOM/ADOMD) · <code>pbi-desktop:query-listener</code></td>
+        <td>Edits the in-memory model via <a class="xref" href="glossary.html#tom">TOM</a>; reaches git only when serialized back to TMDL. Never let Desktop save over hand-authored TMDL.</td></tr>
+    <tr><td class="file">*.Report (PBIR)</td>
+        <td><code>pbip:pbir-format</code> (schema reference) · <code>reports:pbir-cli</code> + <code>reports:create-pbi-report</code> · repo <code>new-report</code> skill (LTD template/theme) · reviewers (<code>deneb/svg/python/r</code>)</td>
+        <td>Direct JSON edits under <code>definition\pages\…</code>; generator scaffolds whole reports.</td></tr>
+    <tr><td class="file">Whole project</td>
+        <td><code>pbip:pbip</code> (structure/renames/forks) · <code>pbip:pbip-validator</code> agent · <code>deploy/validate.py</code> (the CI gate) · fabric-cicd via <code>deploy/deploy.py</code> · <code>fabric-cli:fabric-cli</code> (service side)</td>
+        <td>Validation reads everything; merge to <code>main</code> deploys changed projects to prod.</td></tr>
+  </tbody>
+</table>
+
+<h2>Diff triage — the 60-second version</h2>
+<ul>
+  <li><strong>Which folder?</strong> <code>.SemanticModel</code> = logic/data changed;
+      <code>.Report</code> = presentation/binding changed. A PR that was "move a card" should
+      not touch the model — and vice versa.</li>
+  <li><strong>In TMDL:</strong> lines after <code>=</code> are DAX/M — read them like code.
+      <code>lineageTag</code>/ref reshuffles are churn. Partition <code>source =</code>
+      changes mean the <em>data feed</em> changed → needs a refresh + closest look.</li>
+  <li><strong>In visual.json:</strong> <code>position</code> moved it, <code>query</code>
+      re-bound it, <code>objects</code> re-styled it, <code>filterConfig</code> re-filtered it.</li>
+  <li><strong>Red flags anywhere:</strong> <code>.platform</code> display-name changes
+      (deploy duplicates!), <code>.pbi\</code> files in the diff, a thin report growing a
+      <code>.SemanticModel</code>, whitespace-only churn across many files (line-ending
+      normalization — forbidden by <code>* -text</code>).</li>
+</ul>
+
+<div class="nav">
+  <a href="glossary.html">← Glossary</a>
+  <a href="../lessons/0001-anatomy-of-a-pbip-project.html">Lesson 1 →</a>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 1 — Anatomy of a PBIP Project</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+<link rel="stylesheet" href="../assets/tables.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">Lesson 1 · PBIP / TMDL / PBIR</p>
+  <h1>Anatomy of a PBIP Project</h1>
+  <p class="sub">What the agent is actually writing when it "builds a report" — the file map
+  every later lesson (and every PR review) hangs on.</p>
+</header>
+
+<div class="callout">
+  <span class="lbl">Why this lesson (your mission)</span>
+  <p>In your repo, <strong>merging to <code>main</code> deploys to production</strong>. You
+  review agent PRs today by looking at the rendered report; this lesson gives you the map to
+  review the <em>diff</em> instead. Every specimen below is a real file from
+  <code>powerbi-pbip</code> — nothing is contrived.</p>
+</div>
+
+<p>Your win for today: given any file path from a PBIP project, say <em>(a)</em> which layer
+it belongs to — model or report — and <em>(b)</em> what kind of change a diff there implies.</p>
+
+<h2><span class="n">1</span> The one mental shift</h2>
+<p>A <a class="xref" href="../reference/glossary.html#pbix">PBIX</a> is a zip archive:
+report + model + imported data, in undocumented binary encodings. You can open it, but git
+can't diff it and no one can review it.</p>
+<p>A <a class="xref" href="../reference/glossary.html#pbip">PBIP</a> is the <em>same
+objects</em> saved as a folder of plain text files — and the data is <em>not</em> among
+them (yours lives in Databricks; the local cache is gitignored).<sup><a href="#r1">1</a></sup>
+Which means:</p>
+
+<div class="keybox">
+  <p><strong>Power BI Desktop, the deploy pipeline, and Claude's agents are all just
+  editors of the same text files.</strong> When the agent "adds a measure," it types DAX
+  into a <code>.tmdl</code> file — the identical result to you clicking <em>New measure</em>
+  in Desktop. There is no separate "agent format." If you can read the files, you can read
+  the agent.</p>
+</div>
+
+<h2><span class="n">2</span> Three things at the top</h2>
+<p>Here is your <strong>EMEA Performance Dashboard</strong>, trimmed:<sup><a href="#r1">1</a></sup></p>
+
+<pre><code>EMEA Performance Dashboard.pbip            <span class="cmt">← tiny pointer; "open me" in Desktop</span>
+EMEA Performance Dashboard.SemanticModel\  <span class="cmt">← THE MODEL (tables, M, DAX, relationships)</span>
+EMEA Performance Dashboard.Report\         <span class="cmt">← THE REPORT (pages, visuals, theme)</span></code></pre>
+
+<p>That split <em>is</em> the format. Power BI has always been two products in a trench
+coat — a tabular model engine and a visual canvas — and PBIP finally stores them as two
+folders. Everything you'll ever review sorts into one side or the other:</p>
+
+<pre><code><span class="cmt">── the model side: TMDL ──────────────────────────────</span>
+EMEA….SemanticModel\definition\model.tmdl           <span class="cmt">model props, table ordering</span>
+EMEA….SemanticModel\definition\relationships.tmdl   <span class="cmt">every relationship</span>
+EMEA….SemanticModel\definition\tables\Date.tmdl     <span class="cmt">one file per table…</span>
+EMEA….SemanticModel\definition\tables\Measures - Base.tmdl  <span class="cmt">…incl. measure tables</span>
+
+<span class="cmt">── the report side: PBIR ─────────────────────────────</span>
+EMEA….Report\definition\report.json                 <span class="cmt">report-level filters/settings</span>
+EMEA….Report\definition\pages\Overview\page.json    <span class="cmt">one folder per page</span>
+EMEA….Report\definition\pages\Overview\visuals\kpiRevenue\visual.json
+                                                    <span class="cmt">one folder per visual</span>
+EMEA….Report\StaticResources\RegisteredResources\LTDBrand.json  <span class="cmt">your theme</span></code></pre>
+
+<div class="callout">
+  <span class="lbl">PBIX → PBIP translation</span>
+  <p>Model view, the fields pane, Power Query → <code>*.SemanticModel</code>.
+  The canvas, format pane, bookmarks, themes → <code>*.Report</code>.
+  The data you used to "keep in the file" → not in git at all
+  (<code>.pbi\cache.abf</code>, gitignored).</p>
+</div>
+
+<h2><span class="n">3</span> The model side reads like YAML —
+<a class="xref" href="../reference/glossary.html#tmdl">TMDL</a></h2>
+<p>From your real <code>tables\Measures - Base.tmdl</code>:<sup><a href="#r4">4</a></sup></p>
+
+<pre><code>table 'Measures - Base'
+    lineageTag: d9320412-0a28-4329-944c-56b9dd050c07
+
+    measure Sales = SUM(gold_netsuite_daily_sales[sales_local])
+        lineageTag: b8e2a2cc-…
+
+        formatStringDefinition = SWITCH(SELECTEDVALUE('Market'[Currency]), "GBP", "£#,0;…")
+
+    measure Units = SUM(gold_netsuite_daily_sales[sales_units])
+        formatString: #,0
+        lineageTag: 5374f870-…
+
+    measure 'Stage Mix %' = DIVIDE([Sales], CALCULATE([Sales], REMOVEFILTERS('Stage'), …))
+        formatString: 0.0%;-0.0%;0.0%</code></pre>
+
+<p>Five rules cover ~95% of reading TMDL:<sup><a href="#r4">4</a></sup></p>
+<ul>
+  <li><strong>Nesting = ownership.</strong> Indented under <code>table X</code> ⇒ belongs to
+  table X. There's no "measures:" list syntax — children just sit inside their parent.
+  (On disk the indent is a <em>tab</em>; never "fix" the whitespace.)</li>
+  <li><strong><code>=</code> means expression.</strong> Whatever follows is DAX (or M),
+  verbatim — exactly what you'd type in the formula bar. Multi-line expressions continue on
+  the following lines, one indent deeper.</li>
+  <li><strong><code>:</code> means plain property.</strong> <code>formatString: #,0</code>,
+  <code>isHidden</code> (bare = true), <code>sortByColumn: 'Category Order'</code>.</li>
+  <li><strong>Names with spaces get single quotes</strong> — <code>'Stage Mix %'</code> —
+  same rule as DAX table references.</li>
+  <li><strong><a class="xref" href="../reference/glossary.html#lineagetag">lineageTag</a> is
+  identity plumbing.</strong> Skip it when reading; expect one on anything new.</li>
+</ul>
+
+<div class="callout">
+  <span class="lbl">Review payoff</span>
+  <p>A TMDL diff is a DAX/M code review. <code>measure Sales = …</code> changed? Read the
+  DAX. <code>partition</code> <code>source =</code> changed? The <em>data feed</em> changed —
+  that's the highest-stakes edit a model PR can contain (and needs a refresh to take effect).</p>
+</div>
+
+<h2><span class="n">4</span> The report side is JSON, one file per visual —
+<a class="xref" href="../reference/glossary.html#pbir">PBIR</a></h2>
+<p>Every page is a folder; every visual is a folder holding one <code>visual.json</code>.
+Your revenue KPI card, trimmed:<sup><a href="#r5">5</a></sup></p>
+
+<pre><code>{
+  "$schema": "https://developer.microsoft.com/json-schemas/…/visualContainer/2.11.0/schema.json",
+  "name": "kpiRevenue",
+  "position": { "x": 16, "y": 163, "height": 106, "width": 300.8 },   <span class="cmt">← WHERE</span>
+  "visual": {
+    "visualType": "card",                                             <span class="cmt">← WHAT</span>
+    "query": { "queryState": { "Values": { "projections": [ {
+      "field": { "Measure": { "Expression": { "SourceRef": { "Entity": "Measures - Base" } },
+                              "Property": "Sales" } }                 <span class="cmt">← BOUND TO</span>
+    } ] } } },
+    "objects": { "labels": [ { "properties": { "fontSize": { "expr": {
+      "Literal": { "Value": "17D" } } } } } ] }                       <span class="cmt">← STYLED HOW</span>
+  }
+}</code></pre>
+
+<p>Read every <code>visual.json</code> with the same four questions:
+<strong>where</strong> (<code>position</code>), <strong>what</strong>
+(<code>visualType</code>), <strong>bound to what</strong> (<code>query</code> — note it
+names the <em>model</em> objects: entity <code>Measures - Base</code>, property
+<code>Sales</code>), <strong>styled how</strong> (<code>objects</code> — overrides on top of
+the theme). Visual-level filters ride along in <code>filterConfig</code>.</p>
+
+<p class="sans" style="color:var(--muted); font-size:.9rem;">Two niceties: every file's
+<code>$schema</code> gives you IntelliSense + validation in VS Code<sup><a href="#r5">5</a></sup>;
+and folder names like <code>kpiRevenue</code> are friendly renames (Desktop's default is a
+20-char hex id) — your agents name them so PRs read like English.<sup><a href="#r3">3</a></sup></p>
+
+<h2><span class="n">5</span> Thick vs thin — one line decides</h2>
+<p>Open <code>definition.pbir</code> and look at <code>datasetReference</code>. Two real
+files from your repo:<sup><a href="#r3">3</a></sup></p>
+
+<pre><code><span class="cmt">EMEA Performance Dashboard.Report\definition.pbir — THICK: model travels with report</span>
+"datasetReference": {
+  "byPath": { "path": "../EMEA Performance Dashboard.SemanticModel" }
+}
+
+<span class="cmt">Weekly Sales Summary.Report\definition.pbir — THIN: points at a published shared model</span>
+"datasetReference": {
+  "byConnection": { "connectionString": "…;initial catalog=\"Sales Reports\";…
+                     semanticmodelid=f92eda3c-52bc-4ac9-b337-10bd4fbcd6ac" }
+}</code></pre>
+
+<div class="keybox">
+  <p><strong>A thin report has no <code>.SemanticModel</code> folder at all.</strong> Ask an
+  agent to "fix a measure" in Weekly Sales Summary and the edit <em>must</em> land in the
+  shared <em>Sales Reports</em> model project — where it affects every other thin report on
+  that model. This is the single most common routing mistake to catch in review.</p>
+</div>
+
+<h2><span class="n">6</span> Payload vs plumbing</h2>
+<p>Not every changed file deserves your attention. The full triage table is the
+<a href="../reference/pbip-file-map.html">File Map reference</a> — the short version:</p>
+<ul>
+  <li><span class="b b-read">read</span> — <code>tables\*.tmdl</code>,
+  <code>relationships.tmdl</code>, <code>visual.json</code>, <code>page.json</code>,
+  <code>report.json</code>, <code>definition.pbir</code>, theme,
+  <code>.platform</code> (display names are load-bearing for deploys).</li>
+  <li><span class="b b-glance">glance</span> — <code>model.tmdl</code> (ref reordering ≈
+  churn; a <em>new</em> ref = new object), <code>definition.pbism</code>,
+  <code>pages.json</code>, <code>version.json</code>.</li>
+  <li><span class="b b-noise">noise</span> — <code>lineageTag</code> lines,
+  <code>cultures\*.tmdl</code>, <code>diagramLayout.json</code>,
+  <code>mobileState.json</code>. And <code>.pbi\</code> files should <em>never</em> appear
+  in a PR at all.</li>
+</ul>
+
+<h2><span class="n">7</span> So what is the agent doing in there?</h2>
+<p>Mapping your installed tooling onto the two layers demystifies most tool calls you see
+scroll past:</p>
+
+<table class="ref">
+  <thead><tr><th>When the agent…</th><th>It's using</th><th>Files touched</th></tr></thead>
+  <tbody>
+    <tr><td>edits measures/columns/partitions as text</td>
+        <td class="file">pbip:tmdl · semantic-models:*</td>
+        <td class="file">*.SemanticModel\definition\*.tmdl</td></tr>
+    <tr><td>works the <em>live</em> model in a running Desktop</td>
+        <td class="file">powerbi-modeling MCP · connect-pbid</td>
+        <td>none directly — TOM edits, serialized to TMDL later</td></tr>
+    <tr><td>creates/moves/styles visuals &amp; pages</td>
+        <td class="file">reports:pbir-cli · pbip:pbir-format</td>
+        <td class="file">*.Report\definition\pages\**</td></tr>
+    <tr><td>scaffolds a new LTD-branded report</td>
+        <td class="file">new-report (repo skill)</td>
+        <td>whole project incl. LTDBrand.json</td></tr>
+    <tr><td>checks structure before a PR</td>
+        <td class="file">deploy/validate.py · pbip:pbip-validator</td>
+        <td>reads everything, writes nothing</td></tr>
+    <tr><td>merges to main</td>
+        <td class="file">fabric-cicd (deploy/)</td>
+        <td>→ <strong>production workspaces</strong></td></tr>
+  </tbody>
+</table>
+
+<!-- ============ PRACTICE (widgets from ../assets/quiz.js) ============ -->
+<h2><span class="n">8</span> Practice — make it stick</h2>
+<p class="sans" style="color:var(--muted); font-size:.9rem;">Retrieval beats re-reading.
+Answer from memory; feedback is instant.</p>
+
+<div class="ex">
+  <span class="tasklbl">Exercise A · Retrieval</span>
+  <h3>Which side of the trench coat? Tag each file.</h3>
+  <p class="hint">SemanticModel = the model item. Report = the visual layer.</p>
+  <div class="qz-classify" data-options="SemanticModel|Report">
+    <div class="qz-item" data-op="tables\Date.tmdl"            data-answer="SemanticModel" data-why="One file per table — model side."></div>
+    <div class="qz-item" data-op="pages\Overview\page.json"    data-answer="Report"        data-why="One folder per page; page.json holds page filters/formatting."></div>
+    <div class="qz-item" data-op="definition.pbir"             data-answer="Report"        data-why="The REPORT's core file — .pbir = report; it points at the model."></div>
+    <div class="qz-item" data-op="relationships.tmdl"          data-answer="SemanticModel" data-why="All model relationships live in this one TMDL file."></div>
+    <div class="qz-item" data-op="visuals\kpiRevenue\visual.json" data-answer="Report"     data-why="One folder per visual — the canvas, as files."></div>
+    <div class="qz-item" data-op="definition.pbism"            data-answer="SemanticModel" data-why=".pbism = semantic model core file (format version). The confusable twin of .pbir."></div>
+    <div class="qz-item" data-op="model.tmdl"                  data-answer="SemanticModel" data-why="Model-level properties + ref ordering of tables."></div>
+    <div class="qz-item" data-op="bookmarks\bookmarks.json"    data-answer="Report"        data-why="Bookmarks capture report state — report side."></div>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise B · PR triage</span>
+  <h3>An agent PR changes five files. Click the one that means DAX logic changed.</h3>
+  <p class="hint">Think: which layer owns measures?</p>
+  <div class="qz-pick" data-wrong="✗ Not this one — that file is on the report/plumbing side: layout, theme, page order, or item identity. Measures are model objects; find the .SemanticModel table file.">
+    <span class="qz-line" data-correct="false">EMEA….Report\definition\pages\Overview\visuals\kpiRevenue\visual.json</span>
+    <span class="qz-line" data-correct="false">EMEA….Report\StaticResources\RegisteredResources\LTDBrand.json</span>
+    <span class="qz-line" data-correct="true"
+          data-feedback="✓ Yes — measures live in the model's table files. This diff is a DAX code review: read what follows the = sign. (visual.json would only re-bind/re-style; the theme re-colours; pages.json re-orders; .platform is identity — a rename there can duplicate items on deploy!)">EMEA….SemanticModel\definition\tables\Measures - Base.tmdl</span>
+    <span class="qz-line" data-correct="false">EMEA….Report\definition\pages\pages.json</span>
+    <span class="qz-line" data-correct="false">EMEA….SemanticModel\.platform</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise C · Predict, then reveal</span>
+  <h3>You ask the agent: "fix the Sales measure that Weekly Sales Summary shows wrong."
+  Where should the PR's edit land?</h3>
+  <div class="qz-reveal" data-answer="1">
+    <div class="qz-choices">
+      <button data-v="0">Weekly Sales Summary.SemanticModel\tables\…</button>
+      <button data-v="1">Sales Reports (shared model project) tables\…</button>
+      <button data-v="2">Weekly Sales Summary.Report\…\visual.json</button>
+      <button data-v="3">Weekly Sales Summary.Report\definition.pbir</button>
+    </div>
+    <div class="qz-explain">
+      <strong>The shared Sales Reports model.</strong> Weekly Sales Summary is a
+      <a class="xref" href="../reference/glossary.html#thin">thin report</a> — its
+      <code>definition.pbir</code> is <code>byConnection</code>
+      (<code>semanticmodelid=f92eda3c…</code>), so option A's folder <em>does not exist</em>.
+      The measure lives in the shared model's project, and fixing it there changes every
+      report bound to that model — which is exactly why this edit deserves review.
+      <br><br><em>Nuance:</em> a report-<em>scoped</em> measure could live in the thin
+      report's <code>reportExtensions.json</code> — the one legitimate place DAX hides
+      inside a report. Shared logic still belongs upstream in the model.
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">9</span> Where this takes you</h2>
+<ul>
+  <li><strong>Lesson 2</strong> reads a full table TMDL top-to-bottom — columns, the
+  partition's M query against <code>dwh</code>, annotations — so model diffs become fluent.</li>
+  <li><strong>Lesson 3</strong> does the same for <code>visual.json</code>'s
+  query/objects/filters blocks.</li>
+  <li><strong>Then we review a real merged PR from your repo, cold.</strong> The goal from
+  the mission: predict which files a change <em>should</em> touch, and flag the PR when it
+  touches more.</li>
+</ul>
+
+<div class="callout">
+  <span class="lbl">Primary source — read this next</span>
+  <p>📘 The official <a href="https://learn.microsoft.com/power-bi/developer/projects/projects-overview">
+  <strong>Power BI Desktop projects overview</strong></a> (10 minutes) — the canonical tour of
+  the folder structure you just learned, with links into the
+  <a href="https://learn.microsoft.com/power-bi/developer/projects/projects-dataset">semantic-model</a>
+  and <a href="https://learn.microsoft.com/power-bi/developer/projects/projects-report">report</a>
+  folder references you'll keep coming back to.<sup><a href="#r1">1</a></sup></p>
+</div>
+
+<div class="callout">
+  <span class="lbl">Your teacher is one message away</span>
+  <p>I'm not just the lesson author — I'm here live, with your repo open. If anything is
+  fuzzy ("what's actually inside <code>Date.tmdl</code>?", "show me a real PR diff and walk
+  it"), ask right now in the chat. Confusion is the signal we tune the next lesson on.</p>
+</div>
+
+<div class="refs">
+  <strong>References</strong>
+  <ol>
+    <li id="r1">Microsoft Learn — Power BI Desktop projects (overview: folder anatomy, .gitignore, benefits).
+      <a href="https://learn.microsoft.com/power-bi/developer/projects/projects-overview">learn.microsoft.com</a></li>
+    <li id="r2">Microsoft Learn — Project semantic model folder (file-by-file reference; pbism version gate).
+      <a href="https://learn.microsoft.com/power-bi/developer/projects/projects-dataset">learn.microsoft.com</a></li>
+    <li id="r3">Microsoft Learn — Project report folder (PBIR structure, naming convention, definition.pbir byPath/byConnection).
+      <a href="https://learn.microsoft.com/power-bi/developer/projects/projects-report">learn.microsoft.com</a></li>
+    <li id="r4">Microsoft Learn — Tabular Model Definition Language (indentation, = vs :, expressions, ref).
+      <a href="https://learn.microsoft.com/analysis-services/tmdl/tmdl-overview">learn.microsoft.com</a></li>
+    <li id="r5">Microsoft Learn — Power BI enhanced report format (PBIR) + public JSON schemas.
+      <a href="https://learn.microsoft.com/power-bi/developer/embedded/projects-enhanced-report-format">learn.microsoft.com</a> ·
+      <a href="https://github.com/microsoft/json-schemas/tree/main/fabric/item/report/definition">github.com/microsoft/json-schemas</a></li>
+  </ol>
+  See also the <a href="../reference/pbip-file-map.html">File Map</a>,
+  the <a href="../reference/glossary.html">Glossary</a>, and <code>RESOURCES.md</code>.
+</div>
+
+<div class="nav">
+  <a href="../reference/glossary.html">← Glossary</a>
+  <a href="../reference/pbip-file-map.html">File Map (print it) →</a>
+</div>
+
+</div>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>
