@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teach — Shaun's learning workspaces</title>
+<style>
+  :root{
+    --ink:#1a1a1a; --muted:#6b6b6b; --rule:#e4e0d8; --bg:#fdfcf9;
+    --accent:#9a3412; --code-bg:#f4f1ea;
+    --serif:"Iowan Old Style","Charter",Georgia,Cambria,"Times New Roman",serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:"SF Mono",ui-monospace,"Cascadia Code",Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  html{font-size:17px;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--serif); line-height:1.58;}
+  .wrap{max-width:720px; margin:0 auto; padding:3.5rem 1.5rem 6rem;}
+  header{border-bottom:2px solid var(--ink); padding-bottom:1.1rem; margin-bottom:2rem;}
+  .kicker{font-family:var(--sans); text-transform:uppercase; letter-spacing:.14em;
+    font-size:.7rem; color:var(--accent); font-weight:700; margin:0 0 .5rem;}
+  h1{font-size:2.15rem; line-height:1.08; margin:0 0 .5rem; font-weight:600;}
+  .sub{color:var(--muted); font-style:italic; margin:.3rem 0 0;}
+  h2{font-family:var(--sans); font-size:1.05rem; margin:2.4rem 0 .3rem; font-weight:700;}
+  h2 .status{font-size:.62rem; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--muted); font-weight:700; margin-left:.6rem; vertical-align:middle;}
+  .mission{color:var(--muted); font-size:.95rem; margin:.1rem 0 .8rem;}
+  ul{list-style:none; padding:0; margin:0 0 .5rem;}
+  li{padding:.42rem 0; border-bottom:1px solid var(--rule); font-family:var(--sans); font-size:.92rem;}
+  li a{color:var(--ink); text-decoration:none; border-bottom:1px dotted var(--accent);}
+  li a:hover{color:var(--accent);}
+  li .t{font-size:.62rem; font-family:var(--sans); text-transform:uppercase; letter-spacing:.08em;
+    color:var(--accent); font-weight:700; display:inline-block; width:5.2rem;}
+  footer{margin-top:3.5rem; padding-top:1rem; border-top:1px solid var(--rule);
+    font-family:var(--sans); font-size:.8rem; color:var(--muted);}
+  footer a{color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">Teaching workspaces</p>
+  <h1>Teach</h1>
+  <p class="sub">Short, interactive, mission-driven lessons — one workspace per topic.
+  Lessons are built for retrieval practice; reference docs are built for printing.</p>
+</header>
+
+<h2>PBIP / TMDL / PBIR <span class="status">· started 2026-07</span></h2>
+<p class="mission">Mission: read what the agent writes — make PBIP text formats as
+reviewable as the rendered Power BI report.</p>
+<ul>
+  <li><span class="t">Lesson 1</span><a href="pbip/lessons/0001-anatomy-of-a-pbip-project.html">Anatomy of a PBIP Project</a></li>
+  <li><span class="t">Reference</span><a href="pbip/reference/pbip-file-map.html">The PBIP File Map (print for PR review)</a></li>
+  <li><span class="t">Reference</span><a href="pbip/reference/glossary.html">Glossary</a></li>
+</ul>
+
+<h2>Spark Engine <span class="status">· started 2026-06</span></h2>
+<p class="mission">Mission: turn the Spark engine into a mental model I can reason with —
+faster, cheaper, easier-to-debug Databricks pipelines.</p>
+<ul>
+  <li><span class="t">Lesson 1</span><a href="spark/lessons/0001-the-execution-model.html">The Execution Model</a></li>
+  <li><span class="t">Lesson 2</span><a href="spark/lessons/0002-fifo-in-window-functions.html">FIFO Without a Loop — window mechanics on my own pipeline</a></li>
+  <li><span class="t">Reference</span><a href="spark/reference/glossary.html">Glossary</a></li>
+</ul>
+
+<h2>TypeScript <span class="status">· started 2026-06</span></h2>
+<p class="mission">Mission: TypeScript fluency through Python eyes.</p>
+<ul>
+  <li><span class="t">Lesson 1</span><a href="typescript/lessons/0001-typescript-through-python-eyes.html">TypeScript Through Python Eyes</a></li>
+  <li><span class="t">Lesson 2</span><a href="typescript/lessons/0002-arrays-objects-record-shapes.html">Arrays, Objects &amp; Record Shapes</a></li>
+  <li><span class="t">Reference</span><a href="typescript/reference/python-to-typescript.html">Python → TypeScript phrasebook</a></li>
+  <li><span class="t">Reference</span><a href="typescript/reference/glossary.html">Glossary</a></li>
+</ul>
+
+<footer>
+  Built with the <a href="https://github.com/eushaun/teach">teach</a> workspace ·
+  lessons update as the missions progress. This index is hand-curated — add new lessons here
+  when they ship.
+</footer>
+
+</div>
+</body>
+</html>
