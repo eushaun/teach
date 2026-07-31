@@ -6,6 +6,11 @@ Each top-level folder is a self-contained teaching workspace for one topic:
 
 - [`spark/`](spark/) — Apache Spark
 - [`typescript/`](typescript/) — TypeScript
+- [`pbip/`](pbip/) — Power BI project formats (PBIP / TMDL / PBIR)
+
+All lessons are published straight from this repo via GitHub Pages:
+**<https://eushaun.github.io/teach/>** (push to `main` = deploy; `index.html` is the
+hand-curated front door — add new lessons to it when they ship).
 
 Within each workspace:
 
@@ -17,6 +22,7 @@ Within each workspace:
 | `lessons/`            | Self-contained HTML lessons (the primary unit of teaching)          |
 | `reference/`          | Compressed cheat sheets, glossaries, and quick-reference docs       |
 | `learning-records/`   | Records of what was learned and key insights, ADR-style             |
+| `assets/`             | Shared design system + quiz widgets the lessons build on            |
 
 ## The teach skill
 
