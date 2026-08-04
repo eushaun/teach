@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reference — Narrative Measure Idioms</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/tables.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">Reference · PBIP / TMDL / PBIR</p>
+  <h1>Narrative Measure Idioms</h1>
+  <p class="sub">The four patterns behind any measure-driven text panel — print for PR review.
+  Specimen: <code>Measures - Narrative.tmdl</code> + <code>narrativePanel/visual.json</code>.</p>
+</header>
+
+<h2>1 · The clause pipeline</h2>
+<pre><code>guarded ingredient  →  clause  →  filtered join
+[Sales vs X %]         IF(ISBLANK(_p), "",        CONCATENATEX(
+  BLANK unless           "down " &amp; FORMAT(ABS(_p),   FILTER(UNION(ROW(…),ROW(…)),
+  base &gt; 0               "0.0%") &amp; " vs X")            [@txt] &lt;&gt; ""),
+                                                    [@txt], ", ", [@ord], ASC)</code></pre>
+<p class="small">DAX's <code>", ".join(x for x in parts if x)</code>. Blank ingredient → empty
+clause → dropped by FILTER → shorter sentence. Nothing invents a number; nothing errors.</p>
+
+<h2>2 · Gates (line/panel visibility — always in the TMDL, never in the report JSON)</h2>
+<table class="tbl">
+  <thead><tr><th>Gate</th><th>Fires when</th><th>Effect</th></tr></thead>
+  <tbody>
+  <tr><td><code>NOT HASONEVALUE('Market'[Currency])</code></td><td>Market cleared / multi</td>
+      <td>Panel blank — never sum mixed currencies</td></tr>
+  <tr><td><code>HASONEVALUE('Channel'[channel])</code></td><td>Single channel sliced</td>
+      <td>Channel line dropped (headline already reflects it)</td></tr>
+  <tr><td>Redundancy (top channel ≈ all revenue)</td><td>Single-channel markets</td>
+      <td>Channel line dropped — would restate headline</td></tr>
+  <tr><td>FY-grain check</td><td>Grain = FY</td>
+      <td>One "vs LFY" clause (PP = LY at FY grain)</td></tr>
+  <tr><td><code>IF(_body &lt;&gt; "", _body)</code></td><td>Everything suppressed</td>
+      <td>Measure returns true BLANK, not ""</td></tr>
+  </tbody>
+</table>
+
+<h2>3 · The binding contract (textbox dynamic values)</h2>
+<table class="tbl">
+  <thead><tr><th>Healthy</th><th>Frozen (the Desktop text-editor bug)</th></tr></thead>
+  <tbody>
+  <tr>
+    <td><pre><code>"value": { "expr": { "Measure": {
+  "Expression": { "SourceRef":
+    { "Entity": "Measures - Narrative" } },
+  "Property": "Narrative Headline" } } }</code></pre></td>
+    <td><pre><code>"value": "📉 UK, Week 12:
+  revenue £120,000 …"</code></pre></td>
+  </tr>
+  <tr>
+    <td>Re-evaluates with every slicer</td>
+    <td>Renders fine <em>once</em>, never updates again</td>
+  </tr>
+  </tbody>
+</table>
+<p class="small"><strong>Diff tell:</strong> <code>"value"</code> flips from object-with-<code>expr</code>
+to plain string. Cause: someone opened the textbox's text editor in Desktop and saved. Fix:
+restore the bound <code>textRuns</code> from git. Applies to every dynamic-value textbox.</p>
+
+<h2>4 · Formatting idioms</h2>
+<table class="tbl">
+  <thead><tr><th>Idiom</th><th>Shape</th></tr></thead>
+  <tbody>
+  <tr><td>Directional words, not signs</td>
+      <td><code>IF(_p &lt; 0, "down ", "up ") &amp; FORMAT(ABS(_p), "0.0%")</code></td></tr>
+  <tr><td>Multiples for extreme ratios</td>
+      <td>actual ≥ ~3× budget → <code>FORMAT(_ratio, "0.0") &amp; "× budget"</code></td></tr>
+  <tr><td>Currency symbol per market</td>
+      <td><code>SWITCH(SELECTEDVALUE('Market'[Currency]), "GBP","£", "EUR","€", "USD","$", "")</code></td></tr>
+  <tr><td>Icons</td>
+      <td><code>UNICHAR(128200)</code>=📈 <code>UNICHAR(128201)</code>=📉 — full code point only;
+      surrogate pairs are rejected</td></tr>
+  <tr><td>Line breaks</td>
+      <td><code>UNICHAR(10)</code> in measures; textbox paragraphs render breaks — one bound
+      measure per paragraph</td></tr>
+  </tbody>
+</table>
+
+<h2>Review checklist</h2>
+<table class="tbl">
+  <tbody>
+  <tr><td>☐</td><td>Every % clause traces to a guarded ingredient (base &gt; 0 or ISBLANK guard)</td></tr>
+  <tr><td>☐</td><td>Clause order via explicit <code>[@ord]</code> — reorders are intentional</td></tr>
+  <tr><td>☐</td><td>Gates unchanged (currency, single-channel, redundancy, FY-grain)</td></tr>
+  <tr><td>☐</td><td><code>narrativePanel</code> textRuns still bind <code>expr</code> objects, not strings</td></tr>
+  <tr><td>☐</td><td>New helpers hidden (<code>isHidden</code>), public line measures documented (<code>///</code>)</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  <p><a href="../lessons/0002-reading-the-narrative-measures.html">Lesson 2</a> ·
+  <a href="pbip-file-map.html">file map</a> · <a href="glossary.html">glossary</a></p>
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 2 — Reading the Narrative Measures</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+<link rel="stylesheet" href="../assets/tables.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">Lesson 2 · PBIP / TMDL / PBIR</p>
+  <h1>Reading the Narrative Measures</h1>
+  <p class="sub">How "This period at a glance" assembles prose from guarded DAX — and how to
+  spot, in a diff, the one change that silently kills it.</p>
+</header>
+
+<div class="callout">
+  <span class="lbl">Why this lesson (your mission)</span>
+  <p>The EMEA dashboard's narrative panel is a system an agent built and <em>will touch
+  again</em>: measures in <code>Measures - Narrative.tmdl</code> feeding a textbox in
+  <code>narrativePanel/visual.json</code>. It has already broken once in review — a Desktop
+  save froze the text — and the only place that bug was visible was <strong>the diff</strong>.
+  This lesson makes both files readable so the next PR can't sneak that past you.</p>
+</div>
+
+<p>Your win for today: given the narrative TMDL or a diff to the narrative textbox, you can
+say <em>(a)</em> what will render for a given filter state, <em>(b)</em> why a line or clause
+disappeared, and <em>(c)</em> whether a diff is churn, a meaning change, or a broken binding.</p>
+
+<h2>1 · The idea: prose is just another measure</h2>
+<p>There is no AI at runtime. Each line of the panel is a text measure that formats numbers
+you already trust — the same guarded measures behind the KPI tiles — into a sentence. Because
+it's a measure, it re-evaluates with every slicer change, for free. The whole system is four
+public measures (<code>[Narrative Headline]</code>, <code>[Narrative Channel]</code>,
+<code>[Narrative Mix]</code>, <code>[Narrative Units]</code>) plus hidden
+<code>_narr*</code> helpers, all in one TMDL file:</p>
+<pre><code>reports/EMEA/EMEA Performance Dashboard/
+  EMEA Performance Dashboard.SemanticModel/definition/tables/Measures - Narrative.tmdl</code></pre>
+
+<h2>2 · The clause pipeline (the core idiom)</h2>
+<p>Every sentence is built in three steps. Read them once and the whole file opens up:</p>
+
+<table class="tbl">
+  <thead><tr><th>Step</th><th>What it looks like</th><th>Job</th></tr></thead>
+  <tbody>
+  <tr><td><strong>Guarded ingredient</strong></td>
+      <td><code>[Sales vs Budget %]</code></td>
+      <td>Returns <code>BLANK()</code> unless the base is &gt; 0 — the model-wide rule that a
+      % against a non-positive base must never exist.</td></tr>
+  <tr><td><strong>Clause</strong></td>
+      <td><code>VAR _cBudget = IF(ISBLANK(_p), "", "down " &amp; FORMAT(ABS(_p),"0.0%") &amp; " vs budget")</code></td>
+      <td>Wraps one ingredient in words. Blank in → <strong>empty string out</strong>. A clause
+      never invents a number.</td></tr>
+  <tr><td><strong>Assembly</strong></td>
+      <td><code>CONCATENATEX(FILTER(…), [@txt], ", ", [@ord], ASC)</code></td>
+      <td>Joins only the non-empty clauses, in a fixed order, with separators.</td></tr>
+  </tbody>
+</table>
+
+<p>The assembly step is the part worth memorising — it's DAX's version of
+<code>", ".join(x for x in parts if x)</code>:</p>
+
+<pre><code>VAR _compare =
+    CONCATENATEX(
+        FILTER(
+            UNION(
+                ROW("@ord", 1, "@txt", _cLW),
+                ROW("@ord", 2, "@txt", _cBudget),
+                ROW("@ord", 3, "@txt", _cLY)
+            ),
+            [@txt] &lt;&gt; ""                -- drop empty clauses
+        ),
+        [@txt], ", ", [@ord], ASC        -- join survivors, in order
+    )</code></pre>
+
+<p>Three things to notice as a reviewer: the <code>UNION</code>-of-<code>ROW</code>s is just an
+inline table of candidate clauses<sup><a href="#r1">1</a></sup>; the <code>FILTER</code> is why
+a blank budget produces a <em>shorter sentence</em> instead of "0.0% vs budget"; and the
+explicit <code>[@ord]</code> sort means clause order is deliberate — a diff that reorders those
+<code>ROW</code>s changes the sentence, not just the code layout.</p>
+
+<h2>3 · The gates: why a whole line disappears</h2>
+<p>Clauses guard <em>fragments</em>; gates guard <em>lines</em> or the whole panel. They're
+plain <code>IF</code>s at the top or bottom of each measure:</p>
+
+<table class="tbl">
+  <thead><tr><th>Gate (in the TMDL)</th><th>Effect when it fires</th></tr></thead>
+  <tbody>
+  <tr><td><code>NOT [_narrOneCurrency]</code> → <code>BLANK()</code>
+      <br><span class="small">(<code>_narrOneCurrency = HASONEVALUE('Market'[Currency])</code>)</span></td>
+      <td>Whole panel blanks. A cleared Market slicer would otherwise add £ + € + $ and present
+      the sum as money. Blank beats a wrong number.</td></tr>
+  <tr><td><code>HASONEVALUE('Channel'[channel])</code></td>
+      <td>The channel line vanishes — "Amazon was the largest channel" is meaningless when
+      Amazon is the only channel in scope.</td></tr>
+  <tr><td>Redundancy guard (top channel ≥ 99.5% of revenue, nothing else behind budget)</td>
+      <td>Channel line vanishes — it would restate the headline word for word.</td></tr>
+  <tr><td>FY-grain check in the headline</td>
+      <td>Shows <em>one</em> "vs LFY" clause — at FY grain, prior period and last year are the
+      same year; two identical numbers would print without this.</td></tr>
+  </tbody>
+</table>
+
+<p>Review rule of thumb: <strong>when a line is missing on the canvas, the explanation is a
+gate, and the gate is in the TMDL.</strong> Nothing about visibility lives in the report JSON.</p>
+
+<h2>4 · The rendering contract — and the one diff that kills it</h2>
+<p>The panel is a <em>textbox</em> whose paragraphs use <strong>dynamic values</strong>: each
+paragraph's <code>textRun</code> binds a measure instead of holding a string<sup><a
+href="#r2">2</a></sup>. Healthy binding, in
+<code>…/pages/Overview/visuals/narrativePanel/visual.json</code>:</p>
+
+<pre><code>"textRuns": [ {
+  "value": { "expr": { "Measure": {
+      "Expression": { "SourceRef": { "Entity": "Measures - Narrative" } },
+      "Property": "Narrative Headline" } } },
+  "textStyle": { … } } ]</code></pre>
+
+<p>Now the failure you already met once. If anyone opens that textbox's <em>text editor</em>
+in Desktop, the save flattens every binding into whatever string was on screen:</p>
+
+<pre><code>"textRuns": [ {
+  <b>"value": "📉 UK, Week 12: revenue £120,000, £30,000 below budget (20.0%) — …",</b>
+  "textStyle": { … } } ]</code></pre>
+
+<p>The panel still <em>looks</em> perfect in that filter state — it just never updates again.
+On the canvas this is invisible. In the diff it's unmistakable: <code>"value"</code> changes
+from an <strong>object with <code>expr</code></strong> to a <strong>plain string</strong>.
+That is the single highest-value pattern to burn in from this lesson.</p>
+
+<h2>5 · Prove it to yourself</h2>
+
+<p><strong>Predict the render.</strong> Filter state: UK, a completed week. <code>[Sales]</code>
+= £120,000, <code>[Sales PP]</code> = £125,000, <code>[Budget]</code> is <code>BLANK()</code>
+(no budget row loaded for that week), <code>[Sales LY]</code> = £100,000. What does the
+headline line render?</p>
+<div class="ex">
+  <div class="qz-reveal" data-answer="1">
+    <div class="qz-choices">
+      <button data-v="0">📉 UK, Week 12: revenue £120,000, £0 below budget (0.0%) — down 4.0% vs LW, up 20.0% vs LY.</button>
+      <button data-v="1">📉 UK, Week 12: revenue £120,000 — down 4.0% vs LW, up 20.0% vs LY.</button>
+      <button data-v="2">A blank line — the missing budget blanks the headline.</button>
+      <button data-v="3">An error — FORMAT over BLANK() fails the visual.</button>
+    </div>
+    <div class="qz-explain">The blank budget flows: guarded ingredient returns BLANK → the
+    budget clause becomes "" → FILTER drops it → CONCATENATEX joins the two survivors. The
+    sentence gets <em>shorter</em>; nothing errors, nothing prints a fake number. (The whole
+    line only blanks when <code>[Sales]</code> itself is blank or a panel-level gate fires.)</div>
+  </div>
+</div>
+
+<p><strong>Triage the diff.</strong> Four hunks from a hypothetical PR touching the dashboard —
+classify each as you would in review:</p>
+<div class="ex">
+  <div class="qz-classify" data-options="Safe churn|Meaning change|Broken binding">
+    <div class="qz-item" data-op='narrativePanel/visual.json: "value": { "expr": … } → "value": "📉 UK, Week 12: revenue £120,000 …"'
+         data-answer="Broken binding" data-why="Object-with-expr → plain string = the Desktop text-editor freeze. Panel stops following slicers. Block the PR; restore the bound runs from git."></div>
+    <div class="qz-item" data-op='six visual.json files: "tabOrder": 930 → "tabOrder": 9000 (all values ×~10)'
+         data-answer="Safe churn" data-why="Desktop renumbers tabOrder onto its own scale on save. Semantically identical — keyboard order preserved. Absorb it."></div>
+    <div class="qz-item" data-op='Measures - Narrative.tmdl: ROW("@ord", 2, "@txt", _cBudget) → ROW("@ord", 1, "@txt", _cBudget)'
+         data-answer="Meaning change" data-why="Order keys drive CONCATENATEX's sort — the budget clause now prints before the LW clause. Not a bug, but a sentence change someone should have intended."></div>
+    <div class="qz-item" data-op='Measures - Narrative.tmdl: IF(ISBLANK(_pLY), "", …) → IF(TRUE(), FORMAT(_pLY, "0.0%") &amp; " vs LY", …)'
+         data-answer="Meaning change" data-why="The guard is gone: a blank LY now prints as an empty %, and a negative-base LY would print garbage — exactly the class of output the model bans. Meaning change of the dangerous kind."></div>
+  </div>
+</div>
+
+<p><strong>Find the guard.</strong> One of these lines is the reason "−6917.1% vs LY" can never
+appear on this dashboard. Click it:</p>
+<div class="ex">
+  <div class="qz-pick" data-wrong="✗ Real line, but not the one that bans nonsense percentages.">
+    <span class="qz-line" data-correct="false">VAR _pLY = [Sales vs LY %]</span>
+    <span class="qz-line" data-correct="true"
+          data-feedback="✓ In the ingredient measure: IF(_base &gt; 0, DIVIDE([Sales] - _base, _base)) — no positive base, no percentage. Every clause downstream inherits the discipline for free.">    IF(_base &gt; 0, DIVIDE([Sales] - _base, _base))</span>
+    <span class="qz-line" data-correct="false">FILTER(…, [@txt] &lt;&gt; "")</span>
+    <span class="qz-line" data-correct="false">IF(_body &lt;&gt; "", _body)</span>
+  </div>
+</div>
+
+<h2>6 · Where this shows up next</h2>
+<p>The same three-step idiom (guarded ingredient → clause → filtered CONCATENATEX) is how you'd
+read any future agent-built text: dynamic titles, alert strings in the weekly Slack summary,
+tooltip sentences. And the binding-freeze diff pattern applies to <em>every</em> textbox with
+dynamic values, not just this panel.</p>
+
+<div class="callout">
+  <span class="lbl">Primary source</span>
+  <p>SQLBI — <a href="https://www.sqlbi.com/articles/displaying-the-list-of-selected-items-in-power-bi/">
+  Displaying the list of selected items in Power BI</a>: the canonical treatment of building
+  text with <code>CONCATENATEX</code>, by the people who wrote the book on DAX. Pair with the
+  function page on <a href="https://dax.guide/concatenatex/">dax.guide</a><sup><a href="#r1">1</a></sup>.</p>
+</div>
+
+<h2>References</h2>
+<ol class="refs">
+  <li id="r1"><a href="https://dax.guide/concatenatex/">CONCATENATEX — DAX Guide</a> (syntax,
+  the optional <code>orderBy</code> arguments used here).</li>
+  <li id="r2"><a href="https://learn.microsoft.com/power-bi/create-reports/power-bi-reports-add-text-and-shapes">
+  Add text boxes with dynamic values — Microsoft Learn</a> (the feature the panel is built on).</li>
+  <li><a href="https://learn.microsoft.com/dax/unichar-function-dax">UNICHAR — DAX</a> (the
+  icons: pass the full code point, e.g. <code>UNICHAR(128201)</code> for 📉; surrogate pairs are
+  rejected).</li>
+</ol>
+
+<footer>
+  <p>Next: <a href="../reference/narrative-measure-idioms.html">reference card for this
+  lesson</a> · back to <a href="0001-anatomy-of-a-pbip-project.html">Lesson 1</a> ·
+  <a href="../reference/pbip-file-map.html">file map</a> ·
+  <a href="../reference/glossary.html">glossary</a></p>
+  <p class="small">Numbers in this lesson are synthetic. The structures are real — open
+  <code>Measures - Narrative.tmdl</code> in the repo and read it top to bottom; it should feel
+  familiar now. Anything unclear, ask your agent — it built this file and can walk you through
+  any line.</p>
+</footer>
+
+</div>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

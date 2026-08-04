@@ -71,3 +71,10 @@ Format per entry: **Title** — type · why it's trusted · what it's good for �
 ---
 _Last updated: 2026-07-31. Never trust parametric knowledge — verify claims against these
 (MS Learn MCP `microsoft_docs_search`/`fetch` is the fastest way)._
+
+- **Displaying the list of selected items in Power BI** — SQLBI article · canonical
+  CONCATENATEX-builds-text treatment by Ferrari/Russo · the pattern behind the narrative
+  measures · `https://www.sqlbi.com/articles/displaying-the-list-of-selected-items-in-power-bi/`
+- **Add text boxes with dynamic values** — official docs · the textbox feature the narrative
+  panel renders through · binding measures into text runs ·
+  `https://learn.microsoft.com/power-bi/create-reports/power-bi-reports-add-text-and-shapes`

@@ -60,3 +60,7 @@
   --state merged` when we get there.
 - He may want a printed one-pager of the file map for PR review — the reference doc is
   built print-friendly for that.
+
+- **Public repo → synthetic numbers.** Real file paths and DAX/JSON
+  structures from powerbi-pbip are fine; actual revenue/units figures are not — use round
+  synthetic values (established in lesson 0002).
