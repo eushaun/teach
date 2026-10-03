@@ -6,7 +6,8 @@ Each top-level folder is a self-contained teaching workspace for one topic:
 
 - [`spark/`](spark/) — Apache Spark
 - [`typescript/`](typescript/) — TypeScript
-- [`pbip/`](pbip/) — Power BI project formats (PBIP / TMDL / PBIR)
+- [`powerbi/`](powerbi/) — Power BI project formats (PBIP / TMDL / PBIR)
+- [`warehouse-app/`](warehouse-app/) — Taking over an internal FastAPI + React inventory-forecasting app
 
 All lessons are published straight from this repo via GitHub Pages:
 **<https://eushaun.github.io/teach/>** (push to `main` = deploy; `index.html` is the

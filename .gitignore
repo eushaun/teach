@@ -8,3 +8,7 @@ desktop.ini
 *~
 .vscode/
 .idea/
+
+# Internal-codebase material held out of the public repo: the unredacted briefing and private maintainer notes
+warehouse-app/reference/briefing-*.md
+warehouse-app/PRIVATE-NOTES.md

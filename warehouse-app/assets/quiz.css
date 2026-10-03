@@ -1,0 +1,60 @@
+/* =====================================================================
+   Spark Engine course — interactive quiz widgets (styles)
+   Pairs with quiz.js. Three declarative widgets, all auto-wired:
+     .qz-classify   tag each item into one of N categories
+     .qz-pick       click the one correct line in a code block
+     .qz-reveal     predict via multiple choice, then reveal explanation
+   Markup conventions live in quiz.js.
+   ===================================================================== */
+
+/* exercise shell */
+.ex{border:1px solid var(--rule); border-radius:12px; padding:1.2rem 1.3rem;
+  margin:1.3rem 0; background:#fff;}
+.ex .tasklbl{font-family:var(--sans); font-size:.66rem; text-transform:uppercase;
+  letter-spacing:.12em; font-weight:700; color:var(--accent);}
+.ex h3{margin:.2rem 0 .2rem;}
+.ex .hint{color:var(--muted); font-size:.9rem; margin:.2rem 0 1rem;}
+
+/* ---- .qz-classify ---- */
+.qz-classify{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:.7rem;}
+.qz-item{border:1px solid var(--rule); border-radius:9px; padding:.6rem .7rem; background:#fdfcf9;}
+.qz-item .op{font-family:var(--mono); font-size:.82rem; font-weight:700; margin-bottom:.45rem;}
+.qz-item .btns{display:flex; gap:.35rem;}
+.qz-item button{flex:1; font-family:var(--sans); font-size:.7rem; font-weight:600;
+  padding:.32rem 0; border:1px solid var(--rule); border-radius:6px; background:#fff;
+  cursor:pointer; color:#333; transition:.12s;}
+.qz-item button:hover{border-color:var(--accent);}
+.qz-item button.sel-good{background:var(--good-bg); border-color:var(--good); color:var(--good);}
+.qz-item button.sel-bad{background:var(--bad-bg); border-color:var(--bad); color:var(--bad);}
+.qz-fb{font-family:var(--sans); font-size:.72rem; margin-top:.4rem; min-height:1rem; color:var(--muted);}
+.qz-fb.ok{color:var(--good);} .qz-fb.no{color:var(--bad);}
+.qz-score{grid-column:1/-1; font-family:var(--sans); font-size:.82rem; font-weight:600;
+  margin-top:.3rem; color:var(--muted);}
+
+/* ---- .qz-pick ---- */
+.qz-pick{font-family:var(--mono); font-size:.8rem; margin:.3rem 0;}
+.qz-pick .qz-line{display:block; padding:.45rem .7rem; border:1px solid transparent;
+  border-radius:7px; cursor:pointer; margin:.2rem 0; background:#fbfaf6; transition:.12s; white-space:pre;}
+.qz-pick .qz-line:hover{border-color:var(--accent);}
+.qz-pick .qz-line.ok{background:var(--good-bg); border-color:var(--good);}
+.qz-pick .qz-line.no{background:var(--bad-bg); border-color:var(--bad);}
+.qz-feedback{font-family:var(--sans); font-size:.85rem; margin-top:.7rem; min-height:1.2rem;}
+.qz-feedback.ok{color:var(--good);} .qz-feedback.no{color:var(--bad);}
+
+/* ---- .qz-reveal ---- */
+.qz-choices{display:flex; gap:.5rem; flex-wrap:wrap; margin:.6rem 0;}
+.qz-choices button{font-family:var(--sans); font-size:.85rem; font-weight:600;
+  padding:.45rem 1.1rem; border:1px solid var(--rule); border-radius:8px; background:#fff;
+  cursor:pointer; transition:.12s;}
+.qz-choices button:hover{border-color:var(--accent);}
+.qz-choices button.ok{background:var(--good-bg); border-color:var(--good); color:var(--good);}
+.qz-choices button.no{background:var(--bad-bg); border-color:var(--bad); color:var(--bad);}
+.qz-explain{margin-top:.8rem; padding:.9rem 1.1rem; background:var(--code-bg);
+  border-radius:8px; font-size:.9rem; display:none;}
+.qz-explain.show{display:block;}
+
+/* ---- print: hide controls, reveal explanations ---- */
+@media print{
+  .qz-item button,.qz-choices button{display:none;}
+  .qz-explain{display:block; border:1px solid var(--rule);}
+}

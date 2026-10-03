@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Glossary — Warehouse Forecast App</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<div class="wrap wide">
+<header>
+  <p class="kicker">Reference · Warehouse Forecast App</p>
+  <h1>Glossary</h1>
+  <p class="lede">The canonical vocabulary for this course. Lessons link here, and every term
+  means the same thing in every lesson. Each entry names the file that defines it (local
+  checkout <code>main</code> @ <code>135eac9</code>; paths relative to the repo root,
+  <code>backend/app/</code> abbreviated where obvious). Terms a later lesson teaches in depth
+  are marked <span class="tag" style="position:static">L2+</span>.</p>
+  <nav class="toc">
+    <a href="#weeks-of-cover">Weeks of cover</a><a href="#soh">SOH</a><a href="#fts">FTS</a>
+    <a href="#market-total">Market total</a><a href="#hub">Hub / endpoint</a>
+    <a href="#replenishment-destination">Replenishment destination</a>
+    <a href="#transfer-destination">Transfer destination</a><a href="#demand-basis">Demand basis</a>
+    <a href="#depletion">Depletion</a><a href="#velocity">Velocity</a><a href="#forecast-rate">Forecast rate</a>
+    <a href="#seasonal-forecast">Seasonal forecast</a><a href="#level">Level</a><a href="#growth">Growth</a>
+    <a href="#inbound-grade">Inbound grade</a><a href="#overdue-fade">Overdue fade</a>
+    <a href="#transfer-order">Transfer order</a><a href="#purchase-order">PO / ex-factory</a>
+    <a href="#transit-weeks">Transit weeks</a><a href="#lead-time">Lead time</a>
+    <a href="#case-pack">Case pack</a><a href="#whirlygig">Whirlygig</a><a href="#polybag">Polybag</a>
+    <a href="#compliance-hold">Compliance hold</a><a href="#range">Range</a>
+    <a href="#factory-buy">Factory buy</a><a href="#safety-stock">Safety stock</a>
+    <a href="#target-stock">Target stock</a><a href="#fee-floor">Fee floor</a>
+    <a href="#fba">FBA</a><a href="#fbm">FBM</a><a href="#awd">AWD</a><a href="#agl">AGL</a>
+    <a href="#jas">JAS ledger</a><a href="#tog">Stage / TOG</a>
+    <a href="#projection">Projection</a><a href="#demandseries">DemandSeries</a>
+    <a href="#reading">Reading</a><a href="#arrivals">Arrivals</a>
+    <a href="#calc-basis-version">CALC_BASIS_VERSION</a><a href="#response-cache">Response cache</a>
+    <a href="#market-param">Market param</a><a href="#sync-step">Sync step</a>
+    <a href="#full-replace">Full replace vs upsert</a><a href="#harness">Harness</a>
+    <a href="#changelog">CHANGELOG</a>
+    <a href="#caddy">Caddy</a><a href="#ecr">ECR</a><a href="#ssm">SSM</a>
+    <a href="#apscheduler">APScheduler</a><a href="#msal">MSAL / Entra</a>
+  </nav>
+</header>
+
+<h2>Domain — what planners talk about</h2>
+<dl>
+  <div class="term" id="weeks-of-cover">
+    <dt>Weeks of cover (WoC)</dt>
+    <dd>Weeks until projected stock first reaches zero, interpolated inside the week and
+    capped at 52. Seasonal and arrival-aware: it is a <a class="xref" href="#reading">reading</a>
+    of a <a class="xref" href="#projection">projection</a>, not stock ÷ rate.
+    <span class="why">Defined in <code>services/warehouse_velocity.py</code>
+    <code>_cover_for</code> (:416) using <code>projection.Projection.weeks_of_cover</code> (:188).
+    A few figures still use plain division (the "plain-division register" in CLAUDE.md).</span></dd>
+  </div>
+  <div class="term" id="soh">
+    <dt>SOH (stock on hand)</dt>
+    <dd>Units physically at a location. History per day per location lives in
+    <code>daily_soh</code>; the current snapshot in <code>inventory_levels</code>.
+    <span class="why"><code>models/daily_soh.py</code>, <code>models/inventory_level.py</code>.</span></dd>
+  </div>
+  <div class="term" id="fts">
+    <dt>FTS (free to sell)</dt>
+    <dd>NetSuite <code>quantityavailable</code> (on hand minus committed). The opening stock of
+    every cover projection.
+    <span class="why"><code>services/stock_cover.py</code> <code>get_physical_soh</code> (:11).</span></dd>
+  </div>
+  <div class="term" id="market-total">
+    <dt>Market total ("US Total")</dt>
+    <dd>The same cover reading over all of a market's stock against all-channel sales, with
+    transfers excluded because they move stock inside the market.
+    <span class="why"><code>services/burndown.py</code> <code>get_batch_us_total_seasonal_woc</code> (:594).</span></dd>
+  </div>
+  <div class="term" id="hub">
+    <dt>Hub / endpoint</dt>
+    <dd>A hub receives purchase orders and feeds the other warehouses (Riverside 124, Sydney
+    LBO 4); its demand is the whole market's sales. Endpoints sell or fulfil.
+    <span class="why"><code>services/market_config.py</code> <code>hub_location_ids</code> (:50).</span></dd>
+  </div>
+  <div class="term" id="replenishment-destination">
+    <dt>Replenishment destination / route</dt>
+    <dd>An "irrecoverable" consignment location stock is shipped into (Amazon FBA 98 / 92,
+    The Iconic 121). Its demand is the channels its route declares.
+    <span class="why"><code>market_config.ReplenishmentRoute</code>; engine in
+    <code>services/fba_replenishment.py</code>. <span class="tag" style="position:static">L9</span></span></dd>
+  </div>
+  <div class="term" id="transfer-destination">
+    <dt>Transfer destination / route</dt>
+    <dd>A recallable move between the company's own warehouses (Riverside → Chicago,
+    LBO ↔ LB). If the route names channels, the destination's demand is those channels times
+    a <em>demand share</em> (Chicago: E-Com × 0.75).
+    <span class="why"><code>market_config.TransferRoute</code>; engine in
+    <code>services/transfers.py</code>. <span class="tag" style="position:static">L10</span></span></dd>
+  </div>
+  <div class="term" id="demand-basis">
+    <dt>Demand basis</dt>
+    <dd>What a location's demand is measured on: channel sales, or its own
+    <a class="xref" href="#depletion">depletion</a>. Chosen per location type, and shown on the
+    page as a label such as "All-channel".
+    <span class="why"><code>services/demand.py</code> <code>demand_channels_for_location</code>
+    (:632), <code>location_demand</code> (:713). <span class="tag" style="position:static">L3</span></span></dd>
+  </div>
+  <div class="term" id="depletion">
+    <dt>Depletion (warehouse velocity)</dt>
+    <dd>Demand inferred from negative day-over-day SOH changes, excluding stockout days. The
+    basis for any location with no declared channels (Walmart 127, Sydney LB 5).
+    <span class="why"><code>services/databricks_sync.py</code>
+    <code>_rebuild_monthly_warehouse_velocity</code> (:437).</span></dd>
+  </div>
+  <div class="term" id="velocity">
+    <dt>Velocity (trailing)</dt>
+    <dd>Flat average units per week over <code>lookback_weeks</code> (default 6). Context only;
+    the projection consumes the <a class="xref" href="#forecast-rate">forecast rate</a>.
+    <span class="why"><code>services/velocity.py</code> <code>get_batch_velocities</code> (:9).</span></dd>
+  </div>
+  <div class="term" id="forecast-rate">
+    <dt>Forecast rate</dt>
+    <dd>The average weekly rate the projection actually consumed over the cover period. Stock,
+    cover and this rate reconcile; stock ÷ trailing velocity generally does not.
+    <span class="why"><code>warehouse_velocity._cover_for</code> (:416).</span></dd>
+  </div>
+  <div class="term" id="seasonal-forecast">
+    <dt>Seasonal forecast</dt>
+    <dd>Last year's three-month window around each future month (centre counted twice) times
+    damped, capped growth, held within 0.25×–3× of the current <a class="xref" href="#level">level</a>.
+    <span class="why"><code>demand.seasonal_forecast_detail</code> (:178); constants at the top
+    of <code>demand.py</code>. <span class="tag" style="position:static">L3</span></span></dd>
+  </div>
+  <div class="term" id="level">
+    <dt>Level</dt>
+    <dd>The current in-stock weekly rate over the last 8 complete weeks; it anchors and clamps
+    the forecast. A measured level of zero means zero demand, except at an out-of-stock
+    replenishment destination.
+    <span class="why"><code>demand.in_stock_level</code> (:515).</span></dd>
+  </div>
+  <div class="term" id="growth">
+    <dt>Growth</dt>
+    <dd>Median year-on-year ratio over the last 4 months, damped halfway to 1 and capped at
+    0.5×–2×.
+    <span class="why"><code>demand.py</code> (:283, <code>GROWTH_*</code> constants at the top).</span></dd>
+  </div>
+  <div class="term" id="inbound-grade">
+    <dt>Inbound grade</dt>
+    <dd>How much an incoming lot counts and when it lands: <em>landed</em>,
+    <em>in_transit</em>, <em>confirmed</em>, <em>planned</em> or <em>overdue</em>, decided by
+    dispatch evidence.
+    <span class="why"><code>services/inbound_grading.py</code> <code>grade_inbound</code> (:242),
+    <code>_finalise</code> (:113). <span class="tag" style="position:static">L4</span></span></dd>
+  </div>
+  <div class="term" id="overdue-fade">
+    <dt>Overdue fade</dt>
+    <dd>An overdue lot counts <code>1 − late_days/60</code> of its quantity, reaching zero at
+    60 days late. Interim policy for POs that landed but were never receipted.
+    <span class="why"><code>inbound_grading._finalise</code>; Matt's decision #4 in
+    <code>PROJECTION-ALIGNMENT-PLAN.md</code>.</span></dd>
+  </div>
+  <div class="term" id="transfer-order">
+    <dt>Transfer order (TO)</dt>
+    <dd>A NetSuite inter-location move. Open TOs arrive at ship date + route
+    <a class="xref" href="#transit-weeks">transit</a>, and are dropped once past that date.
+    <span class="why"><code>transfer_orders</code> table; <code>inbound_grading.graded_incoming_by_location</code> (:382).</span></dd>
+  </div>
+  <div class="term" id="purchase-order">
+    <dt>PO / ex-factory date</dt>
+    <dd>A supplier purchase order and the date it leaves the factory (the revised date wins).
+    Arrival = ex-factory + shipping transit (8 weeks, 4 for whirlygig).
+    <span class="why"><code>open_purchase_orders</code>; <code>sku_config.get_default_transit_weeks</code>.</span></dd>
+  </div>
+  <div class="term" id="transit-weeks">
+    <dt>Transit weeks (route)</dt>
+    <dd>How long a move between two own locations takes: 3 weeks Riverside → Amazon, otherwise
+    2. Dates open TOs and when a recommended shipment lands.
+    <span class="why"><code>market_config.route_transit_weeks</code>.</span></dd>
+  </div>
+  <div class="term" id="lead-time">
+    <dt>Lead time (order lead)</dt>
+    <dd>Factory order to landed stock, production included: 24 weeks standard, 4 for
+    whirlygig. Used by Factory Buy only.
+    <span class="why"><code>sku_config.get_default_order_lead_weeks</code>.</span></dd>
+  </div>
+  <div class="term" id="case-pack">
+    <dt>Case pack (box quantity)</dt>
+    <dd>Units per outer carton (NetSuite <code>outer_quantity</code>, default 24). Shipment
+    quantities round up to whole cases unless the SKU is split-case eligible.
+    <span class="why"><code>services/case_packs.py</code>; <code>sku_master.box_quantity</code>.</span></dd>
+  </div>
+  <div class="term" id="whirlygig">
+    <dt>Whirlygig (WG)</dt>
+    <dd>The fast-moving core SKU family: short lead time and a different overstock threshold.
+    The Dashboard defaults to showing WG only.
+    <span class="why"><code>sku_config.WHIRLYGIG_SKUS</code>, duplicated by <code>sku_master.is_whirlygig</code>.</span></dd>
+  </div>
+  <div class="term" id="polybag">
+    <dt>Polybag</dt>
+    <dd>An Amazon prep requirement; polybag lines go on a separate transfer file in the export.
+    <span class="why"><code>amazon_range.poly_bag_required</code>.</span></dd>
+  </div>
+  <div class="term" id="compliance-hold">
+    <dt>Compliance hold (ship hold)</dt>
+    <dd>Blocks a SKU from Amazon shipments: Ship Qty forced to 0 and the SKU filtered from the
+    export, while its need stays visible.
+    <span class="why"><code>services/compliance.py</code> <code>derive_hold</code>,
+    <code>sync_compliance_to_range</code>. <span class="tag" style="position:static">L10</span></span></dd>
+  </div>
+  <div class="term" id="range">
+    <dt>Range / range call</dt>
+    <dd>Which channels merch has ranged a SKU in (<code>sku_market_status.channels</code>), plus
+    the Amazon range file in <code>amazon_range</code>. Gates Chicago transfers.
+    <span class="why"><code>databricks_sync.ranged_channels</code> (origin/main; not in the local checkout).</span></dd>
+  </div>
+  <div class="term" id="factory-buy">
+    <dt>Factory buy</dt>
+    <dd>The 12-month supplier order recommendation at market-total level.
+    <span class="why"><code>services/factory_buy.py</code> <code>get_factory_buy_recommendations</code> (:79).</span></dd>
+  </div>
+  <div class="term" id="safety-stock">
+    <dt>Safety stock</dt>
+    <dd>z × σ × √lead on the measured lead time. Computed in the replenishment engine but does
+    <strong>not</strong> affect Ship Qty; it only feeds <a class="xref" href="#target-stock">target stock</a>.
+    <span class="why"><code>services/fba_replenishment.py</code> (:622; :627 on origin/main).</span></dd>
+  </div>
+  <div class="term" id="target-stock">
+    <dt>Target stock</dt>
+    <dd>Safety stock plus promo buffer, displayed on the FBA/FBM Mix page. Not an input to the
+    shipped quantity.
+    <span class="why"><code>fba_replenishment.py</code> (:628; :633 on origin/main).</span></dd>
+  </div>
+  <div class="term" id="fee-floor">
+    <dt>Fee floor (fee-risk threshold)</dt>
+    <dd>Weeks of cover (default 4) below which Amazon low-inventory fees apply. Demand rate ×
+    threshold is the floor that sizes Ship Qty.
+    <span class="why"><code>fba_replenishment_config.fee_risk_threshold_weeks</code>;
+    <code>_run_burndown_need</code> (:171).</span></dd>
+  </div>
+  <div class="term" id="fba">
+    <dt>FBA (Fulfilled by Amazon)</dt>
+    <dd>Stock held in Amazon fulfilment centres (NetSuite locations 98 / 92).
+    <span class="why"><code>amazon_fba_inventory</code>.</span></dd>
+  </div>
+  <div class="term" id="fbm">
+    <dt>FBM (Fulfilled by Merchant)</dt>
+    <dd>Amazon orders shipped from the company's own warehouse. The sync relabels them from the
+    Amazon channel using a hardcoded US entity id; FBM counts as displaced FBA demand.
+    <span class="why"><code>databricks_sync.sync_daily_sales</code> (:135).</span></dd>
+  </div>
+  <div class="term" id="awd">
+    <dt>AWD (Amazon Warehousing &amp; Distribution)</dt>
+    <dd>Amazon's upstream overflow storage. Not sellable.
+    <span class="why"><code>amazon_awd_inventory</code>.</span></dd>
+  </div>
+  <div class="term" id="agl">
+    <dt>AGL (Amazon Global Logistics)</dt>
+    <dd>Factory-direct shipments into Amazon; planners upload the tracker export.
+    <span class="why"><code>agl_shipments</code>; <code>routers/admin.py</code> upload endpoint.</span></dd>
+  </div>
+  <div class="term" id="jas">
+    <dt>JAS ledger</dt>
+    <dd>The freight forwarder's inbound ledger with ETAs, synced as
+    <code>amazon_fba_inbound</code>. A primary input to inbound grading.
+    <span class="why"><code>models/amazon_fba_inbound.py</code>.</span></dd>
+  </div>
+  <div class="term" id="tog">
+    <dt>Stage / TOG</dt>
+    <dd>Product lifecycle stage, and the TOG thermal rating parsed from the product name
+    ("1.0T").
+    <span class="why"><code>sku_master.stage</code> / <code>tog</code>.</span></dd>
+  </div>
+</dl>
+
+<h2>Code — the engine's vocabulary</h2>
+<dl>
+  <div class="term" id="projection">
+    <dt>Projection (<code>projection.project</code>)</dt>
+    <dd>The one stock-projection primitive: steps an opening balance through contiguous
+    periods, <code>closing = opening + arrivals − demand</code>, nothing floored. Every cover
+    figure, order quantity and urgency band is a reading of one.
+    <span class="why"><code>services/projection.py</code> <code>project</code> (:241),
+    <code>Projection</code> (:168). <span class="tag" style="position:static">L2</span></span></dd>
+  </div>
+  <div class="term" id="demandseries">
+    <dt>DemandSeries</dt>
+    <dd>A location × SKU's demand: monthly forecast rates, trailing rate, basis, scope and
+    method. It supplies the projection's periods (<code>weekly_periods</code>).
+    <span class="why"><code>services/demand.py</code> (:318).</span></dd>
+  </div>
+  <div class="term" id="reading">
+    <dt>Reading</dt>
+    <dd>A question asked of a finished projection: <code>weeks_of_cover</code>,
+    <code>min_point</code>, <code>deficit_against</code>, <code>gap_before</code> (plus
+    <code>first_stockout</code>). Policy lives in the inputs, never in a forked loop.
+    <span class="why"><code>projection.py</code> (:179–238). <span class="tag" style="position:static">L2</span></span></dd>
+  </div>
+  <div class="term" id="arrivals">
+    <dt>Arrivals (<code>early_arrivals</code>)</dt>
+    <dd>Dated, weighted quantities from inbound grading. An arrival lands in the period that
+    contains its date; one dated before the first period is credited or dropped, and the
+    caller must choose.
+    <span class="why"><code>projection.Arrival</code> (:82), <code>arrivals_from_dicts</code> (:292).</span></dd>
+  </div>
+  <div class="term" id="calc-basis-version">
+    <dt>CALC_BASIS_VERSION</dt>
+    <dd>A version string (<code>YYYY-MM-DD.N</code>) baked into every cache key. Bump it in the
+    same commit as any projection, velocity or grading change, or users keep seeing old numbers.
+    <span class="why"><code>services/cache.py</code> (:20).</span></dd>
+  </div>
+  <div class="term" id="response-cache">
+    <dt>Response cache</dt>
+    <dd>In-process dict of computed JSON responses. No TTL; cleared only by a successful sync,
+    an admin mutation or a restart. Out-of-band DB edits stay invisible until then.
+    <span class="why"><code>services/cache.py</code> <code>make_key</code>, <code>invalidate</code>.</span></dd>
+  </div>
+  <div class="term" id="market-param">
+    <dt>Market param</dt>
+    <dd><code>?market=</code> on every dashboard request, added by the axios interceptor and
+    resolved by the <code>get_market_param</code> dependency. Every service defaults
+    <code>market="US"</code>, so a forgotten <code>market=market</code> silently breaks AU.
+    <span class="why"><code>middleware/auth.py</code> (:181); <code>frontend/src/api/client.ts</code> (:24).</span></dd>
+  </div>
+  <div class="term" id="sync-step">
+    <dt>Sync step</dt>
+    <dd>One named stage of the daily Databricks → Postgres sync, logged as a
+    <code>sync_log</code> row and shown in Settings. 18 on origin/main (17 locally), counting
+    <code>cluster_warmup</code>. Most steps abort the whole run on failure.
+    <span class="why"><code>routers/sync.py</code> <code>SYNC_STEPS</code>; <code>services/databricks_sync.py</code>.
+    <span class="tag" style="position:static">L5</span></span></dd>
+  </div>
+  <div class="term" id="full-replace">
+    <dt>Full replace vs incremental upsert</dt>
+    <dd>Full replace: <code>DELETE</code> then <code>INSERT</code> the whole table (POs, TOs,
+    inventory levels, most Amazon tables). Incremental upsert: re-pull a trailing window and
+    <code>ON CONFLICT</code> update (<code>daily_sales</code> 7 days, <code>daily_soh</code> 45 days).
+    <span class="why"><code>databricks_sync.run_incremental_sync</code> (:1703).</span></dd>
+  </div>
+  <div class="term" id="harness">
+    <dt>Harness (baseline dump)</dt>
+    <dd>The projection regression gate: <code>dump</code> every engine's output before and
+    after a change, then <code>compare</code>. The repo's only test suite, and it is run by hand.
+    <span class="why"><code>backend/app/tools/compare_projections.py</code>. <span class="tag" style="position:static">L8</span></span></dd>
+  </div>
+  <div class="term" id="changelog">
+    <dt>CHANGELOG (app version)</dt>
+    <dd>The version of record is <code>CHANGELOG[0].version</code> in the sidebar component;
+    there are no git tags.
+    <span class="why"><code>frontend/src/components/Layout.tsx</code> (:8).</span></dd>
+  </div>
+</dl>
+
+<h2>Infra — where it runs</h2>
+<dl>
+  <div class="term" id="caddy">
+    <dt>Caddy</dt>
+    <dd>The reverse proxy on the EC2 box that terminates TLS (Let's Encrypt) and routes to the
+    app container. It is shared with other apps on the same box. The repo copy of the
+    <code>Caddyfile</code> is a stale reference.
+    <span class="why"><code>Caddyfile</code> (reference only).</span></dd>
+  </div>
+  <div class="term" id="ecr">
+    <dt>ECR</dt>
+    <dd>Amazon's container registry. The pipeline pushes each image tagged with its commit SHA
+    and <code>latest</code>; old SHAs make rollback possible.
+    <span class="why"><code>bitbucket-pipelines.yml</code>.</span></dd>
+  </div>
+  <div class="term" id="ssm">
+    <dt>SSM (Systems Manager)</dt>
+    <dd>How the pipeline reaches the box: <code>send-command</code> runs a pull +
+    <code>docker compose up</code>. It is also the only way to get a shell (no SSH).
+    <span class="why"><code>scripts/deploy.sh</code>.</span></dd>
+  </div>
+  <div class="term" id="apscheduler">
+    <dt>APScheduler</dt>
+    <dd>The in-process scheduler that fires the daily sync at 12:00 UTC inside the web
+    process. This is why production pins uvicorn to one worker.
+    <span class="why"><code>backend/app/main.py</code> (:37).</span></dd>
+  </div>
+  <div class="term" id="msal">
+    <dt>MSAL / Entra ID</dt>
+    <dd>Microsoft login. The SPA gets an Entra ID token via <code>@azure/msal-browser</code>
+    and sends it as a Bearer token; the backend validates it against Entra's keys. A separate
+    dev-only login mode also exists.
+    <span class="why"><code>frontend/src/auth/msalConfig.ts</code>; <code>middleware/auth.py</code>.</span></dd>
+  </div>
+</dl>
+
+<div class="nav">
+  <a href="architecture-map.html">← Architecture Map</a>
+  <a href="../lessons/0001-the-map-four-layers-one-primitive.html">Lesson 1 →</a>
+</div>
+
+</div>
+</body>
+</html>

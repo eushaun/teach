@@ -1,10 +1,11 @@
 # CLAUDE.md
 
-Personal learning repo. Each top-level folder (`spark/`, `typescript/`, `pbip/`) is a
+Personal learning repo. Each top-level folder (`spark/`, `typescript/`, `powerbi/`) is a
 self-contained teaching workspace driven by the **`/teach` skill**, which is vendored at
 `.claude/skills/teach/` and auto-synced from upstream (see README for the hook details and
-one-time per-machine install). This file is what a fresh Claude Code session on any device
-needs to continue the teaching work.
+one-time per-machine install). `warehouse-app/` is published, but its unredacted briefing
+(`reference/briefing-*.md`) and `PRIVATE-NOTES.md` are gitignored — never force-add them. This file is what a fresh Claude Code session
+on any device needs to continue the teaching work.
 
 ## How to resume work here (any device)
 
@@ -22,7 +23,7 @@ needs to continue the teaching work.
 - **Assets are per-workspace copies** in `<topic>/assets/`: `course.css` (Tufte-ish design
   system), `quiz.css` + `quiz.js` (declarative quiz widgets — markup contract documented in
   the `quiz.js` header: `.qz-classify`, `.qz-pick`, `.qz-reveal`), `tables.css` (reference
-  tables + attention badges, currently in `pbip/`). Reuse/extend components; never inline
+  tables + attention badges, currently in `powerbi/`). Reuse/extend components; never inline
   what a future lesson would duplicate. When starting a new workspace, copy assets from the
   most recent one.
 - Lessons: `lessons/000N-<slug>.html`, sequential; one tangible win each; numbered
@@ -34,7 +35,7 @@ needs to continue the teaching work.
 
 ## Specimens from other repos
 
-Lessons deliberately teach from Shaun's real work files (e.g. `pbip/` quotes
+Lessons deliberately teach from Shaun's real work files (e.g. `powerbi/` quotes
 `repos/powerbi-pbip`; `spark/` lesson 2 teaches his production FIFO pipeline from
 `ltd-dbx-asset-bundle`). **Those repos may not exist on the current device.** The excerpts
 already embedded in lessons/NOTES are sufficient context — never fabricate specimen

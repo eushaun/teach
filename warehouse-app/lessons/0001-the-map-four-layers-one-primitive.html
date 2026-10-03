@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 1 — The Map: Four Layers, One Primitive</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+<link rel="stylesheet" href="../assets/tables.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">Lesson 1 · Warehouse Forecast App</p>
+  <h1>The Map: Four Layers, One Primitive</h1>
+  <p class="sub">Where everything in Matt's app lives, and the one idea that produces every
+  number a planner sees.</p>
+</header>
+
+<div class="callout">
+  <span class="lbl">Why this lesson (your mission)</span>
+  <p>As maintainer, every question you get ("the sync failed", "this cover looks wrong", "AU
+  is blank", "the deploy broke it") lands in exactly one layer of this app. This lesson gives
+  you the map, so your first move is always the right file. Every path and line below was
+  checked against your local checkout (<code>main</code> @ <code>135eac9</code>; production
+  runs <code>origin/main</code>, two commits ahead).</p>
+</div>
+
+<p>Your win for today: <strong>place any symptom or file in one of four layers, and know
+that every number on every page is a reading of one projection.</strong></p>
+
+<h2><span class="n">1</span> Four layers, and Infra around them</h2>
+<pre><code> Databricks dwh.*                                     <span class="cmt">← your side; the app only reads it</span>
+     │  18 steps, daily 12:00 UTC + "Sync Now"
+ <strong>① SYNC</strong>          databricks_sync.py, run by APScheduler inside the web process
+     ▼
+ <strong>② STORAGE</strong>       Postgres 16 on the same box: 30 tables (mirrors · rollups · app state)
+     ▲
+ <strong>③ API + ENGINE</strong>  FastAPI: routers → services (the engines) → response cache
+     │  JSON over /api/*, behind Caddy (TLS) on one EC2 box
+ <strong>④ UI</strong>            React 19 SPA in the planner's browser
+ ─────────────────────────────────────────────────────────────
+ <strong>INFRA</strong>           push to main → Bitbucket Pipelines → ECR → SSM → EC2</code></pre>
+
+<p><strong>① Sync.</strong> One file, <code>backend/app/services/databricks_sync.py</code>,
+pulls from your <code>dwh</code> tables into Postgres. The trigger is not a Databricks job
+or a cron on the host. An <a class="xref" href="../reference/glossary.html#apscheduler">APScheduler</a>
+job is registered inside the FastAPI process itself
+(<code>main.py:37</code>).<sup><a href="#r1">1</a></sup><sup><a href="#r9">9</a></sup> The
+orchestrator <code>run_incremental_sync</code> (<code>databricks_sync.py:1703</code>) calls
+each <a class="xref" href="../reference/glossary.html#sync-step">step</a> in order.<sup><a href="#r2">2</a></sup></p>
+
+<p><strong>② Storage.</strong> Postgres tables defined by SQLAlchemy models in
+<code>backend/app/models/</code> and created by Alembic migrations in
+<code>backend/alembic/versions/</code>, which run on every container start. Three kinds of table:
+raw mirrors of <code>dwh</code> (<code>daily_sales</code>, <code>inventory_levels</code>…),
+rollups the sync rebuilds (<code>monthly_warehouse_velocity</code>), and app state planners
+edit (<code>fba_replenishment_config</code>, <code>alert_thresholds</code>, users).</p>
+
+<p><strong>③ API + Engine.</strong> <code>backend/app/main.py</code> mounts four routers
+(<code>:81-84</code>): auth, dashboard, sync, admin.<sup><a href="#r1">1</a></sup> This is
+FastAPI's standard <code>APIRouter</code> "bigger applications" layout.<sup><a href="#r8">8</a></sup>
+Handlers in <code>routers/</code> call plain-function modules in <code>services/</code>, which is
+where every engine lives. Results are shaped by Pydantic models in <code>schemas/</code> and
+held in an in-process <a class="xref" href="../reference/glossary.html#response-cache">response cache</a>.</p>
+
+<p><strong>④ UI.</strong> <code>frontend/src/App.tsx</code> declares the routes
+(<code>:115</code> onward), one per page component in <code>frontend/src/pages/</code>.
+Each page fetches its data through typed functions in <code>frontend/src/api/</code>. In
+production the same FastAPI process serves the built React files.</p>
+
+<div class="callout">
+  <span class="lbl">Python bridge</span>
+  <p>The backend half will feel familiar: it has the same shape as your MCP servers (FastAPI
+  routers, Pydantic models, a settings class). The new parts are the <em>domain</em> in
+  <code>services/</code> and the React half, which we'll take just-in-time from L7.</p>
+</div>
+
+<h2><span class="n">2</span> The one primitive</h2>
+<p>Until September 2026 the app had six separate projection loops, each with its own
+horizon and its own idea of demand, and their numbers sat side by side "as though they
+agree".<sup><a href="#r6">6</a></sup> Matt's
+<em>projection alignment</em> programme replaced them with one module. Its docstring opens:
+"Every cover figure, order quantity and urgency band in the app is a reading of the same
+thing."<sup><a href="#r3">3</a></sup></p>
+
+<div class="keybox">
+  <p><strong>The recipe:</strong> opening stock → <code>projection.project(...)</code> over
+  periods from a <a class="xref" href="../reference/glossary.html#demandseries"><code>DemandSeries</code></a>,
+  with <a class="xref" href="../reference/glossary.html#arrivals">arrivals</a> from
+  <a class="xref" href="../reference/glossary.html#inbound-grade">inbound grading</a> → take a
+  <a class="xref" href="../reference/glossary.html#reading">reading</a>. Policy goes in the
+  inputs, never in a forked loop.</p>
+</div>
+
+<p>The whole loop, from <code>backend/app/services/projection.py:279-289</code>:<sup><a href="#r3">3</a></sup></p>
+<pre><code>    points: list[ProjectionPoint] = []
+    running = float(opening_soh)
+    for i, p in enumerate(periods):
+        items = by_period.get(i, [])
+        arrived = sum(a.quantity for a in items)
+        demand = p.demand
+        closing = running + arrived - demand          <span class="cmt">← nothing is floored</span>
+        points.append(ProjectionPoint(p, running, arrived, demand, closing, items))
+        running = closing
+
+    return Projection(float(opening_soh), points, dropped)</code></pre>
+
+<p>That's a running balance, nothing more. The engines differ only in what they feed it
+and which question they ask of the result. There are four readings:
+<code>weeks_of_cover</code>, <code>min_point</code>, <code>deficit_against</code> and
+<code>gap_before</code> (<code>projection.py:188-226</code>). Cover pages ask the first.
+Quantity pages (Transfers, Replenishment) ask <code>deficit_against</code>. Lesson 2 takes
+them one at a time.</p>
+
+<p>The full engine picture, from the demand tables down to which pages use which reading,
+is section 2 of the <a href="../reference/architecture-map.html">Architecture Map</a>.</p>
+
+<h2><span class="n">3</span> Trace one number</h2>
+<p>A Dashboard row shows a small bar and a figure under <strong>Riverside</strong>, say
+<code>6.5 wk</code> (synthetic). Here is where it comes from, top to bottom. This chain is
+the core skill of the course.</p>
+
+<ol>
+  <li><span class="b b-glance">UI</span> <code>frontend/src/pages/Dashboard.tsx:366-385</code>
+  renders the bar from <code>row.warehouse_totals[wh].weeks_of_cover</code>. The bar's width
+  is <code>woc / 26</code>, so it is full at 26 weeks even though the figure caps at 52. The
+  data was loaded by a <code>useEffect</code> (<code>:80-98</code>) that calls
+  <code>fetchStockCover()</code> (<code>:85</code>) and re-runs when the market changes.<sup><a href="#r4">4</a></sup></li>
+  <li><span class="b b-glance">UI</span> <code>frontend/src/api/dashboard.ts:28-33</code>
+  issues <code>GET /dashboard/stock-cover</code>. The axios interceptor at
+  <code>api/client.ts:24-31</code> appends <code>?market=US</code> from the zustand market store.<sup><a href="#r4">4</a></sup></li>
+  <li><span class="b b-glance">API</span> <code>main.py:82</code> mounts the dashboard
+  router at <code>/api/dashboard</code>. <code>routers/dashboard.py:94</code>
+  <code>stock_cover</code> checks the cache (<code>:105</code>), reads opening stock with
+  <code>get_physical_soh</code> (<code>:113</code>), and calls
+  <code>get_batch_seasonal_woc</code> (<code>:118</code>). It then packs
+  <code>seasonal_woc[(wh_name, sku)]</code> into a <code>WarehouseCover</code>
+  (<code>:168-173</code>) and caches the response (<code>:225</code>).<sup><a href="#r5">5</a></sup></li>
+  <li><span class="b b-glance">Engine</span> <code>services/warehouse_velocity.py:310</code>
+  <code>get_batch_seasonal_woc</code> builds demand with <code>location_demand</code>
+  (<code>:374</code>) and arrivals with <code>_batch_fetch_incoming</code> (<code>:376</code>).
+  For each pair it calls <code>_cover_for</code> (<code>:391</code>), which runs
+  <code>project(..., early_arrivals="credit")</code> over 52 weekly periods
+  (<code>:431-435</code>) and reads <code>weeks_of_cover(cap=52)</code> (<code>:436</code>).<sup><a href="#r5">5</a></sup></li>
+  <li><span class="b b-glance">Engine</span> <code>services/demand.py:713</code>
+  <code>location_demand</code> asks <code>demand_channels_for_location</code>. Riverside (124)
+  is the market's <a class="xref" href="../reference/glossary.html#hub">hub</a>, so the answer
+  is <code>ALL_CHANNELS</code> (<code>:647-648</code>). Its demand is <em>every</em> US sale,
+  built by <code>channel_demand(..., None, ...)</code> (<code>:758-761</code>), which reads
+  monthly history from <code>daily_sales</code> via
+  <code>velocity.get_batch_monthly_history</code> (<code>demand.py:589</code>,
+  <code>velocity.py:62</code>).<sup><a href="#r5">5</a></sup></li>
+  <li><span class="b b-glance">Engine</span> Arrivals:
+  <code>_batch_fetch_incoming</code> (<code>warehouse_velocity.py:293-307</code>) delegates to
+  <code>inbound_grading.graded_incoming_by_location</code> (<code>inbound_grading.py:382</code>).
+  That grades lots from <code>amazon_fba_inbound</code> (<code>:281</code>) and
+  <code>open_purchase_orders</code> (<code>:328</code>) in <code>grade_inbound</code>
+  (<code>:242</code>), then adds open <code>transfer_orders</code> (<code>:437</code>).<sup><a href="#r5">5</a></sup></li>
+  <li><span class="b b-glance">Storage</span> Postgres <code>daily_sales</code>,
+  unique on (date, country, channel, sku, revenue_type).</li>
+  <li><span class="b b-glance">Sync</span> <code>databricks_sync.py:135</code>
+  <code>sync_daily_sales</code> selects from
+  <code>dwh.netsuite.gold_netsuite_daily_sales_by_customer</code> (<code>:168</code>) and
+  upserts <code>ON CONFLICT</code> (<code>:253</code>), re-pulling the last 7 days each night.<sup><a href="#r2">2</a></sup></li>
+  <li><span class="b b-glance">Source</span> Your gold table in <code>dwh.netsuite</code>.
+  Rename a column there and step 1 of the sync fails, which aborts the whole run.</li>
+</ol>
+
+<div class="callout">
+  <span class="lbl">What the trace tells a maintainer</span>
+  <p>A "wrong" Riverside cover has exactly three suspects: <em>opening stock</em>
+  (<code>inventory_levels</code>), <em>demand</em> (<code>daily_sales</code>, all channels,
+  because it's the hub), or <em>arrivals</em> (graded POs and TOs). Every other page's
+  number has the same three suspects, fed through different inputs.</p>
+</div>
+
+<h2><span class="n">4</span> The maintainer's three rules</h2>
+<div class="keybox">
+  <p><strong>1 · No tests.</strong> The harness (<code>tools/compare_projections.py</code>)
+  is the gate, and a push to <code>main</code> deploys to production.</p>
+  <p><strong>2 · Every service defaults <code>market="US"</code>.</strong> A call that forgets
+  <code>market=market</code> breaks AU silently.</p>
+  <p><strong>3 · The response cache has no TTL.</strong> Bump
+  <a class="xref" href="../reference/glossary.html#calc-basis-version"><code>CALC_BASIS_VERSION</code></a>
+  with any rule change.</p>
+</div>
+
+<!-- ============ PRACTICE (widgets from ../assets/quiz.js) ============ -->
+<h2><span class="n">5</span> Practice: make it stick</h2>
+<p class="sans" style="color:var(--muted); font-size:.9rem;">Answer from memory; feedback is
+instant.</p>
+
+<div class="ex">
+  <span class="tasklbl">Exercise A · Retrieval</span>
+  <h3>Which layer does each path belong to?</h3>
+  <p class="hint">Sync · Storage · API+Engine · UI · Infra.</p>
+  <div class="qz-classify" data-options="Sync|Storage|API+Engine|UI|Infra">
+    <div class="qz-item" data-op="backend/app/services/databricks_sync.py"      data-answer="Sync"       data-why="The whole dwh → Postgres pull lives in this one file."></div>
+    <div class="qz-item" data-op="backend/alembic/versions/033_*.py"            data-answer="Storage"    data-why="Migrations define (and sometimes data-fix) the Postgres schema."></div>
+    <div class="qz-item" data-op="backend/app/services/projection.py"           data-answer="API+Engine" data-why="The one primitive: every number is a reading of project()."></div>
+    <div class="qz-item" data-op="frontend/src/pages/Transfers.tsx"             data-answer="UI"         data-why="A page component in the React SPA."></div>
+    <div class="qz-item" data-op="bitbucket-pipelines.yml"                      data-answer="Infra"      data-why="Push to main → build → ECR → SSM deploy."></div>
+    <div class="qz-item" data-op="backend/app/schemas/dashboard.py"             data-answer="API+Engine" data-why="Pydantic response models: shape what the API returns (and drop undeclared fields)."></div>
+    <div class="qz-item" data-op="frontend/src/types/index.ts"                  data-answer="UI"         data-why="Hand-mirrored TypeScript types for the API responses."></div>
+    <div class="qz-item" data-op="backend/app/models/daily_soh.py"              data-answer="Storage"    data-why="One SQLAlchemy model per Postgres table."></div>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise B · A maintainer's day</span>
+  <h3>Settings shows last night's sync aborted at step 9,
+  <code>amazon_sku_mapping</code>. Click the first thing to open.</h3>
+  <div class="qz-pick" data-wrong="✗ Not first. A red step is a Sync-layer failure: start where that step's code lives.">
+    <span class="qz-line" data-correct="false">frontend/src/pages/Settings.tsx</span>
+    <span class="qz-line" data-correct="true"
+          data-feedback="✓ The step's function in databricks_sync.py (and the sync_log error text). Remember: steps 9–17 abort the run, so every later table is stale and the cache was NOT invalidated.">backend/app/services/databricks_sync.py</span>
+    <span class="qz-line" data-correct="false">backend/app/services/cache.py</span>
+    <span class="qz-line" data-correct="false">backend/app/routers/dashboard.py</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise C · A maintainer's day</span>
+  <h3>A helper call was added inside the transfers engine yesterday. Today AU Transfers is
+  empty but US works. Click the first file to open.</h3>
+  <div class="qz-pick" data-wrong="✗ Not first. US working rules out auth and the UI; think rule 2.">
+    <span class="qz-line" data-correct="false">frontend/src/stores/marketStore.ts</span>
+    <span class="qz-line" data-correct="false">backend/app/middleware/auth.py</span>
+    <span class="qz-line" data-correct="true"
+          data-feedback="✓ Rule 2: the new call almost certainly omits market=market, so it runs for the default market=&quot;US&quot; and AU gets nothing back.">backend/app/services/transfers.py</span>
+    <span class="qz-line" data-correct="false">backend/alembic/versions/</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise D · A maintainer's day</span>
+  <h3>A new engine field shows up in the API JSON (network tab), but not on the page. Click
+  the first file to open.</h3>
+  <div class="qz-pick" data-wrong="✗ The JSON already carries it, so the backend is done. The gap is on the UI side.">
+    <span class="qz-line" data-correct="false">backend/app/schemas/dashboard.py</span>
+    <span class="qz-line" data-correct="false">backend/app/services/cache.py</span>
+    <span class="qz-line" data-correct="true"
+          data-feedback="✓ The hand-mirrored type must declare the field before the page can use it (then edit the page). Had the field been missing from the JSON, schemas/dashboard.py would be first: Pydantic silently drops undeclared fields.">frontend/src/types/index.ts</span>
+    <span class="qz-line" data-correct="false">backend/app/services/databricks_sync.py</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise E · A maintainer's day</span>
+  <h3>The pipeline went green, but every page now returns 500. What do you open first?</h3>
+  <div class="qz-pick" data-wrong="✗ The build passed, so the problem is at runtime on the box.">
+    <span class="qz-line" data-correct="false">bitbucket-pipelines.yml</span>
+    <span class="qz-line" data-correct="true"
+          data-feedback="✓ Runtime errors only show in the container. The image ran alembic + seed + uvicorn on start; a Python runtime error deploys straight to prod because no gate runs Python. Get the logs over SSM (L8).">the prod app container logs (via SSM)</span>
+    <span class="qz-line" data-correct="false">frontend/src/api/client.ts</span>
+    <span class="qz-line" data-correct="false">Caddyfile (repo copy)</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise F · Re-draw the chain from memory</span>
+  <h3>On paper, re-draw the trace from the Riverside cover bar down to <code>dwh</code>.
+  Then check one hop: which Postgres table is Riverside's <em>demand</em> built from?</h3>
+  <div class="qz-reveal" data-answer="0">
+    <div class="qz-choices">
+      <button data-v="0">daily_sales</button>
+      <button data-v="1">daily_soh</button>
+      <button data-v="2">inventory_levels</button>
+      <button data-v="3">transfer_orders</button>
+    </div>
+    <div class="qz-explain">
+      <strong><code>daily_sales</code>.</strong> Riverside is the hub, so its basis is
+      all-channel sales, not its own SOH depletion (that's Walmart's). The chain:
+      <br><code>Dashboard.tsx</code> bar → <code>fetchStockCover</code> →
+      <code>GET /api/dashboard/stock-cover</code> (+ <code>?market</code>) →
+      <code>routers/dashboard.py</code> <code>stock_cover</code> →
+      <code>warehouse_velocity.get_batch_seasonal_woc</code> → <code>_cover_for</code> →
+      <code>projection.project</code> → <code>weeks_of_cover(cap=52)</code>
+      <br>inputs: opening = <code>get_physical_soh</code> (<code>inventory_levels</code>) ·
+      demand = <code>demand.location_demand</code> → hub → <code>channel_demand</code> →
+      <code>daily_sales</code> ← sync step <code>daily_sales</code> ←
+      <code>dwh.netsuite.gold_netsuite_daily_sales_by_customer</code> ·
+      arrivals = <code>inbound_grading</code> ← <code>open_purchase_orders</code> /
+      <code>amazon_fba_inbound</code> / <code>transfer_orders</code>.
+      <br><br>Missed a hop? That's the one to rehearse before Lesson 2.
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">6</span> Where this takes you</h2>
+<ul>
+  <li><strong>Lesson 2</strong> opens <code>projection.py</code> and hand-simulates a
+  projection with synthetic numbers, taking each of the four readings in turn.</li>
+  <li><strong>Lessons 3–4</strong> cover the two inputs, demand and arrivals. Those are
+  where nearly every "wrong number" turns out to live.</li>
+</ul>
+
+<div class="callout">
+  <span class="lbl">Primary source: read this next</span>
+  <p>Matt's own design rationale:
+  <code>C:\Users\ShaunLim\repos\warehouse-forecast-app\PROJECTION-ALIGNMENT-PLAN.md</code>.
+  Read "Why", "Target" and "Decisions from the business (Matt, 9 September 2026)", about 15
+  minutes. It explains why the code is shaped around one primitive, in the author's
+  words.<sup><a href="#r6">6</a></sup> Then skim the repo's
+  <code>CLAUDE.md</code> in the same folder, the operating notes the app was built
+  with.<sup><a href="#r7">7</a></sup></p>
+</div>
+
+<div class="callout">
+  <span class="lbl">Your teacher is one message away</span>
+  <p>I'm here live with the repo open. If any hop in the trace is fuzzy ("what's actually in
+  <code>WarehouseCover</code>?", "show me the AU equivalent"), ask now in the chat. What
+  confuses you sets the pace of the next lesson.</p>
+</div>
+
+<div class="refs">
+  <strong>References</strong> <span class="sans" style="color:var(--muted); font-size:.85rem;">(repo
+  paths relative to <code>warehouse-forecast-app/</code>; local checkout <code>135eac9</code>)</span>
+  <ol>
+    <li id="r1"><code>backend/app/main.py</code>: lifespan scheduler <code>:21-40</code>
+      (cron at <code>:37</code>), router mounts <code>:81-84</code>, SPA serving <code>:97-106</code>.</li>
+    <li id="r2"><code>backend/app/services/databricks_sync.py</code>: <code>sync_daily_sales</code>
+      <code>:135</code>, source table <code>:168</code>, upsert <code>:253</code>,
+      <code>run_incremental_sync</code> <code>:1703</code>. (origin/main lines are about one higher
+      and add step <code>amazon_fba_shipments</code>.)</li>
+    <li id="r3"><code>backend/app/services/projection.py</code>: module docstring <code>:1-34</code>,
+      readings <code>:179-238</code>, <code>project</code> <code>:241-289</code>.</li>
+    <li id="r4"><code>frontend/src/pages/Dashboard.tsx</code> <code>:80-98</code>, <code>:366-385</code>;
+      <code>frontend/src/api/dashboard.ts</code> <code>:28-33</code>;
+      <code>frontend/src/api/client.ts</code> <code>:24-31</code>; <code>frontend/src/App.tsx</code> <code>:115-140</code>.</li>
+    <li id="r5"><code>backend/app/routers/dashboard.py</code> <code>:94-226</code>;
+      <code>services/warehouse_velocity.py</code> <code>:293-450</code>;
+      <code>services/demand.py</code> <code>:556-600</code>, <code>:632-655</code>, <code>:713-794</code>;
+      <code>services/velocity.py</code> <code>:62-100</code>;
+      <code>services/inbound_grading.py</code> <code>:242-460</code>.</li>
+    <li id="r6"><code>PROJECTION-ALIGNMENT-PLAN.md</code>: "Why" (the six-loop table), "Target",
+      "Decisions from the business (Matt, 9 September 2026)".</li>
+    <li id="r7"><code>CLAUDE.md</code> (repo root): architecture, release checklist, gotchas. Partly
+      stale; the code wins.</li>
+    <li id="r8">FastAPI: Bigger Applications, Multiple Files (the <code>APIRouter</code> pattern).
+      <a href="https://fastapi.tiangolo.com/tutorial/bigger-applications/">fastapi.tiangolo.com</a></li>
+    <li id="r9">APScheduler 3.x user guide (<code>BackgroundScheduler</code>, cron trigger).
+      <a href="https://apscheduler.readthedocs.io/en/3.x/userguide.html">apscheduler.readthedocs.io</a></li>
+  </ol>
+  See also the <a href="../reference/architecture-map.html">Architecture Map</a>, the
+  <a href="../reference/glossary.html">Glossary</a>, and <code>RESOURCES.md</code>.
+</div>
+
+<div class="nav">
+  <a href="../reference/glossary.html">← Glossary</a>
+  <span class="sans" style="color:var(--muted); font-size:.85rem;">Next: Lesson 2, Reading
+  <code>projection.py</code> (coming soon)</span>
+  <a href="../reference/architecture-map.html">Architecture Map (print it) →</a>
+</div>
+
+</div>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>
