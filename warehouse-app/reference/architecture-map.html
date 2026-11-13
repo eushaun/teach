@@ -34,7 +34,7 @@
   <div class="bx"><div class="bt"><span class="bn">2</span>Store</div>
     <div class="bd">Postgres 16 container on the same host: 38 tables, migrations head <code>056</code>.</div>
     <div class="chips"><span class="chip lbl">mirrors</span><span class="chip lbl">rollups</span><span class="chip own">the record</span><span class="chip lbl">config</span><span class="chip lbl">system</span></div></div>
-  <div class="arr both">SQLAlchemy 2.0 (sync psycopg2), mostly raw SQL via <code>text()</code> · planned: Databricks reads <code>sku_range</code> back</div>
+  <div class="arr both">SQLAlchemy 2.0 (sync psycopg2), mostly raw SQL via <code>text()</code> · since 12 Nov 2026: Airbyte reads <code>sku_range</code> back into <code>dwh.dreamcast</code></div>
   <div class="bx hot"><div class="bt"><span class="bn">3</span>Engine</div>
     <div class="bd"><code>backend/app/services/</code>: one primitive, three inputs → readings → policy → review rules (§2).</div></div>
   <div class="arr">Pydantic schemas · <a class="xref" href="glossary.html#response-cache">response cache</a> (dict, no TTL, warmed by the sync)</div>
@@ -337,7 +337,7 @@ defaults <code>market="US"</code>.</p>
 <ol class="sans" style="font-size:.88rem;">
   <li>User-facing entry at the top of <code>CHANGELOG</code> in <code>Layout.tsx</code> (sidebar version) + developer entry in <code>CHANGELOG.md</code>.</li>
   <li>Engine change: harness <code>dump</code> before and after, <code>compare</code>; bump <code>CALC_BASIS_VERSION</code> (<code>"YYYY-MM-DD.N"</code>).</li>
-  <li><code>npx eslint src/ &amp;&amp; npm run build</code>; <code>python -m compileall -q app</code>; linear migration chain.</li>
+  <li><code>npx eslint src/ &amp;&amp; npm run build</code>; <code>python -m compileall -q app</code>; linear migration chain; a <code>sku_range</code> column rename or drop also breaks the Airbyte feed into <code>dwh.dreamcast</code>.</li>
   <li>Push; watch the pipeline; confirm live by a distinctive new string in the served JS bundle.</li>
   <li>After deploy: recalculate the current weekly order; Sync Now if a fed table or market was added.</li>
   <li>Rollback: revert and push, or re-tag an older <code>:sha</code> image as <code>latest</code> and <code>compose up -d</code>. Migrations go forward only in practice.</li>
@@ -353,7 +353,8 @@ defaults <code>market="US"</code>.</p>
   <a class="xref" href="glossary.html#calc-basis-version"><code>CALC_BASIS_VERSION</code></a> with any
   rule change; SQL fixes and out-of-process syncs need a restart or Sync Now.</p>
   <p><strong>4 · The file seeds, a decision wins.</strong> The sync never overwrites a decision
-  stored in <code>sku_range</code>.</p>
+  stored in <code>sku_range</code>. And <code>sku_range</code> is itself a source now: Airbyte
+  reads it into <code>dwh.dreamcast</code>, so its columns are a contract.</p>
   <p><strong>5 · One worker, always.</strong> The scheduler, cache and rate limiters assume a
   single process.</p>
 </div>

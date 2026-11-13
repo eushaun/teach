@@ -40,7 +40,8 @@ engines → React frontend → EC2 deploy) with confidence.
 - Every specimen comes from the real repo (`/home/eushaun/repos/warehouse-forecast-app` on the
   WSL machine; a separate Windows clone exists).
 - Since v2.22 DreamCast is also the record for ranging and SKU statuses (`sku_range`), and
-  Databricks is due to read it back, so data now flows both ways between the app and `dwh`.
+  since 2026-11-12 Airbyte reads `sku_range` from the app's Postgres into `dwh.dreamcast`, so
+  data flows both ways between the app and `dwh`.
 - TypeScript/React taught just-in-time, bridging from the `typescript/` workspace.
 - Lessons short + interactive (house default).
 - **Privacy:** this is an internal company codebase. The workspace is published (2026-10-04),

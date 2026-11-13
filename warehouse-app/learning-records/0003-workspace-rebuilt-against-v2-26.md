@@ -14,7 +14,7 @@ and `RESOURCES.md` refreshed. Records 0001–0002 stay as history. The mission i
 unchanged.
 
 **The mental model changed from "four layers" to "five boxes".** Sync → Store (mirrors +
-rollups + the record) → Engine (one primitive, three inputs, then readings, policy, review
+rollups + the record, which Airbyte reads back into `dwh.dreamcast` since 2026-11-12) → Engine (one primitive, three inputs, then readings, policy, review
 rules) → API (REST + MCP) → UI, with Infra around them. The primitive (`projection.py`) is the
 one thing that did not change, which is itself the lesson: every feature since went into the
 inputs.

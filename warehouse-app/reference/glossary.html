@@ -509,7 +509,9 @@
     <dt>The record</dt>
     <dd>Tables DreamCast is the source of truth for, written by planners and admins:
     <code>sku_range</code>, orders and their audit trail, demand adjustments, promos, compliance
-    cases, reservations, launches. Rule: the file seeds, a decision wins.
+    cases, reservations, launches. Rule: the file seeds, a decision wins. Since 12 Nov 2026
+    Airbyte reads <code>sku_range</code> into <code>dwh.dreamcast</code>, so its columns are a
+    downstream contract.
     <span class="why"><code>backend/app/models/CLAUDE.md</code>.</span></dd>
   </div>
   <div class="term" id="mirror">

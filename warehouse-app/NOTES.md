@@ -93,7 +93,8 @@
   review-rule pattern across all three.
 - L12: **The record and access** — `sku_range` (ranging, both statuses, seller SKU, case pack
   override, "the file seeds, a decision wins"), compliance holds; auth, roles and market scoping
-  end to end; the planned reverse flow into Databricks.
+  end to end; the reverse flow (live since 2026-11-12: Airbyte reads `sku_range` into
+  `dwh.dreamcast`, so a `sku_range` column change is a breaking change downstream).
 - L13: **A maintainer's audit** — known debt and open questions for Matt. Security and prod
   findings stay in `PRIVATE-NOTES.md`; the lesson teaches how to audit, not the findings.
 
@@ -108,5 +109,7 @@
     on US timing.
   - A failed abort step stops the sync before the cache is invalidated; the sidebar's "Last
     sync" reads the latest completed step of any run.
-- **Reverse flow:** Shaun's pending item to read `sku_range` from Postgres into Databricks.
+- **Reverse flow (live since 2026-11-12):** Airbyte reads `public.sku_range` directly from the
+  app's Postgres (no intermediate view) into `dwh.dreamcast`. Matt's `prod-ops` skill still calls
+  it pending; it is stale on this. Connection details: `PRIVATE-NOTES.md` only.
 - Security and production-side findings: see the local, gitignored `PRIVATE-NOTES.md`.

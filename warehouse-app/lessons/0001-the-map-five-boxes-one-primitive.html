@@ -60,7 +60,7 @@ number on request from one primitive, and serves it to planners through a React 
     <div class="chips"><span class="chip lbl">mirrors</span><span class="chip">daily_sales</span><span class="chip">inventory_levels</span><span class="chip">inbound_shipment_po</span>
       <span class="chip lbl">rollups</span><span class="chip">monthly_velocity</span>
       <span class="chip lbl">the record</span><span class="chip own">sku_range</span><span class="chip own">replenishment_order</span><span class="chip own">demand_adjustments</span></div></div>
-  <div class="arr up">planned: Databricks reads <code>sku_range</code> back from here</div>
+  <div class="arr up">since 12 Nov 2026: Airbyte reads <code>sku_range</code> back into <code>dwh.dreamcast</code></div>
   <div class="arr">SQLAlchemy, mostly raw SQL via <code>text()</code></div>
   <div class="bx hot"><div class="bt"><span class="bn">3</span>Engine</div>
     <div class="bd"><code>backend/app/services/</code>. One primitive, three inputs, then
@@ -84,8 +84,10 @@ number on request from one primitive, and serves it to planners through a React 
   <li><strong>Store is "mirror + record".</strong> DreamCast is now the source of truth for
   ranging, both SKU statuses, seller SKUs and the Amazon case pack (<code>sku_range</code>),
   the weekly replenishment orders and their audit trail, planned demand adjustments, the promo
-  calendar and compliance cases. Data flows both ways: you are due to read
-  <code>sku_range</code> into Databricks.<sup><a href="#r2">2</a></sup></li>
+  calendar and compliance cases. Data flows both ways: since 12 Nov 2026 Airbyte reads
+  <code>public.sku_range</code> straight from the app's Postgres into the Databricks schema
+  <code>dwh.dreamcast</code>. So a rename or drop of a <code>sku_range</code> column is now a
+  breaking change for a downstream pipeline, not just for the app.<sup><a href="#r2">2</a></sup></li>
   <li><strong>There is a second front door.</strong> An MCP server lives in the same process
   at <code>/mcp</code>, using the same services as the REST API.</li>
 </ul>
@@ -119,7 +121,7 @@ boxes from section 1 sit inside the <code>warehouse-app</code> container.<sup><a
           <span class="chip">response cache (dict, no TTL)</span><span class="chip off">/mcp</span>
         </div></div>
       <div class="frame solid"><span class="flbl">postgres container</span>
-        <div class="chips"><span class="chip">postgres:16-alpine</span><span class="chip">volume pgdata</span><span class="chip">bound to the host only</span></div></div>
+        <div class="chips"><span class="chip">postgres:16-alpine</span><span class="chip">volume pgdata</span><span class="chip">read by Airbyte (sku_range)</span></div></div>
     </div>
     <div class="bx src"><div class="bt">two other internal apps + their Postgres</div>
       <div class="bd">share the CPU, memory and Caddy.</div></div>
@@ -507,7 +509,9 @@ Python checks. The gates are the ones you run before pushing, from the repo's
   (<code>backend/app/tools/compare_projections.py</code> <code>dump</code> before and after,
   then <code>compare</code>) and a <code>CALC_BASIS_VERSION</code> bump.</li>
   <li><code>npx eslint src/ &amp;&amp; npm run build</code>; <code>python -m compileall -q app</code>;
-  a linear migration chain (check the head on <code>main</code> before numbering).</li>
+  a linear migration chain (check the head on <code>main</code> before numbering). A migration
+  that renames or drops a <code>sku_range</code> column also breaks the Airbyte feed into
+  <code>dwh.dreamcast</code>: change both sides together.</li>
   <li>After deploy: recalculate the current weekly order; Sync Now if a Databricks-fed table or
   a market was added.</li>
 </ol>
