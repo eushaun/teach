@@ -1,9 +1,13 @@
+---
+Status: superseded by LR-0003 (roadmap and lesson 1 rebuilt against v2.26)
+---
+
 # Roadmap set (L1–L11); Lesson 1 issued as "the map"
 
 2026-10-03. With the codebase briefing in hand, the course was laid out as eleven lessons
 (NOTES.md): the map → projection → demand → inbound grading → sync → endpoint + cache →
 React/TS just-in-time → harness + deploy → FBA replenishment → other engines → maintainer's
-audit. Lesson 1 (`lessons/0001-the-map-four-layers-one-primitive.html`) is the map: four
+audit. Lesson 1 (the October version, deleted 2026-11-13; see LR-0003) is the map: four
 layers, the one-primitive recipe, and one Dashboard cover traced from pixel to `dwh`.
 
 **Why L1 is the map:** Shaun's zone of proximal development is the app's *architecture and
@@ -19,7 +23,7 @@ NetSuite entity IDs, people's names beyond Matt and Shaun, or real figures (synt
 **Doc/code contradictions to raise with Matt** (from the briefing, verified in code):
 safety stock and the promo calendar never reach Ship Qty; AU is half-wired (FBM split,
 alert thresholds, dispatch-evidence grading, Amazon mapping/range all US-only); a failed
-sync step leaves the cache un-invalidated with no alert. Production-side findings to verify
+sync step leaves the cache un-invalidated. Production-side findings to verify
 live in the local `PRIVATE-NOTES.md` (not in the repo). One more found while authoring L1: the Dashboard's
 cover tooltip still says Chicago is measured on depletion, but since v1.10 the code uses
 E-Com sales × 0.75.

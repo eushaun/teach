@@ -3,261 +3,409 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Architecture Map — Warehouse Forecast App</title>
+<title>Architecture Map — DreamCast</title>
 <link rel="stylesheet" href="../assets/course.css">
 <link rel="stylesheet" href="../assets/tables.css">
+<link rel="stylesheet" href="../assets/diagram.css">
 </head>
 <body>
 <div class="wrap wide">
 <header>
-  <p class="kicker">Reference · Warehouse Forecast App</p>
+  <p class="kicker">Reference · DreamCast (warehouse-forecast-app)</p>
   <h1>The Architecture Map</h1>
-  <p class="lede">Four layers, one primitive, and where every page's number comes from.
+  <p class="lede">Five boxes, one primitive, and where every page's number comes from.
   Print-friendly: keep it beside the code. Badges show how often a maintainer touches a path:
   <span class="b b-read">hot</span> = most changes land here ·
   <span class="b b-glance">warm</span> = touched per feature or per incident ·
   <span class="b b-noise">cold</span> = plumbing, rarely edited.
-  Line numbers are from the local checkout (<code>main</code> @ <code>135eac9</code>);
-  production runs <code>origin/main</code> @ <code>0b134ca</code>, two commits ahead.</p>
+  Paths are relative to the repo root; line numbers are at <code>origin/main</code> @
+  <code>380ff8f</code> (v2.26, 13 Nov 2026), which is what production runs. Taught in
+  <a href="../lessons/0001-the-map-five-boxes-one-primitive.html">Lesson 1</a>.</p>
 </header>
 
-<h2><span class="n">1</span> The four layers</h2>
-<pre><code><span class="cmt">── SOURCE ─────────────────────────────────────────────────────────────────</span>
- Databricks dwh catalog: dwh.netsuite.* · dwh.netsuite2.* · dwh.merch.* · dwh.amazon_seller_central.*
-       │  databricks-sql-connector · 18 steps · daily 12:00 UTC + "Sync Now"
-       ▼
-<span class="cmt">── one t3.small EC2 box, ap-southeast-2 ─────────────────────────────────────</span>
- <strong>① SYNC</strong>     <a class="xref" href="glossary.html#apscheduler">APScheduler</a> (in the web process) → databricks_sync.run_incremental_sync
-       │  incremental upserts + full replaces, batches of 50k
-       ▼
- <strong>② STORAGE</strong>  Postgres 16 (container, same box): 30 tables
-             = raw mirrors of dwh + rollups + app state (config, users, orders)
-       ▲
-       │  SQLAlchemy (sync psycopg2), mostly raw SQL via text()
- <strong>③ API + ENGINE</strong>  FastAPI (uvicorn, 1 worker): routers → services (engines) → <a class="xref" href="glossary.html#response-cache">response cache</a>
-       │  /api/* JSON · also serves the built React app (/assets + SPA catch-all)
- <a class="xref" href="glossary.html#caddy">Caddy</a> (TLS, shared with other apps on the box)
-       │  HTTPS
-       ▼
- <strong>④ UI</strong>       React 19 SPA in the planner's browser (<a class="xref" href="glossary.html#msal">MSAL</a> login → Entra token as Bearer)
-
-<span class="cmt">── INFRA (around all four) ─────────────────────────────────────────────────</span>
- push to main → Bitbucket Pipelines → docker build → <a class="xref" href="glossary.html#ecr">ECR</a> → <a class="xref" href="glossary.html#ssm">SSM</a> send-command → compose up on EC2</code></pre>
+<h2><span class="n">1</span> The five boxes</h2>
+<div class="sys">
+  <div class="bx src"><div class="bt">Source · Databricks <code>dwh</code></div>
+    <div class="bd"><code>netsuite</code> · <code>netsuite2</code> · <code>merch</code> · <code>amazon_seller_central</code> · <code>shipping</code> (the shipping master is owned outside <code>ltd-dbx-asset-bundle</code>)</div></div>
+  <div class="arr">databricks-sql-connector → a dedicated all-purpose cluster · 08:00 + 20:00 UTC + Sync Now</div>
+  <div class="bx"><div class="bt"><span class="bn">1</span>Sync</div>
+    <div class="bd"><a class="xref" href="glossary.html#apscheduler">APScheduler</a> in the web process → <code>databricks_sync.run_incremental_sync</code>: warm-up, 16 data steps, invalidate the cache, warm it again.</div></div>
+  <div class="arr">incremental upsert (sales 7 days, SOH 45 days) or full replace</div>
+  <div class="bx"><div class="bt"><span class="bn">2</span>Store</div>
+    <div class="bd">Postgres 16 container on the same host: 38 tables, migrations head <code>056</code>.</div>
+    <div class="chips"><span class="chip lbl">mirrors</span><span class="chip lbl">rollups</span><span class="chip own">the record</span><span class="chip lbl">config</span><span class="chip lbl">system</span></div></div>
+  <div class="arr both">SQLAlchemy 2.0 (sync psycopg2), mostly raw SQL via <code>text()</code> · planned: Databricks reads <code>sku_range</code> back</div>
+  <div class="bx hot"><div class="bt"><span class="bn">3</span>Engine</div>
+    <div class="bd"><code>backend/app/services/</code>: one primitive, three inputs → readings → policy → review rules (§2).</div></div>
+  <div class="arr">Pydantic schemas · <a class="xref" href="glossary.html#response-cache">response cache</a> (dict, no TTL, warmed by the sync)</div>
+  <div class="bx"><div class="bt"><span class="bn">4</span>API</div>
+    <div class="chips"><span class="chip">REST /api/auth · /api/dashboard · /api/admin · /api/sync</span><span class="chip off">MCP /mcp (only when MCP_ENABLED)</span></div></div>
+  <div class="arr">HTTPS via <a class="xref" href="glossary.html#caddy">Caddy</a> · <a class="xref" href="glossary.html#msal">Entra ID</a> token as Bearer</div>
+  <div class="bx"><div class="bt"><span class="bn">5</span>UI</div>
+    <div class="bd">React 19 SPA: 18 routed pages, served by FastAPI in prod (Vite dev server on 5173 in dev).</div></div>
+  <div class="frame"><span class="flbl">Infra, around all five</span>
+    <div class="bd sans" style="font-size:.82rem;">push to <code>main</code> → Bitbucket Pipelines → one image (SPA + Python) →
+    <a class="xref" href="glossary.html#ecr">ECR</a> → <a class="xref" href="glossary.html#ssm">SSM</a> →
+    <code>compose up -d</code> on a shared EC2 host. Container start =
+    <code>alembic upgrade head &amp;&amp; python -m app.seed &amp;&amp; uvicorn … --workers 1</code>.</div></div>
+</div>
 
 <h2><span class="n">2</span> The engine, as one picture</h2>
 <p>Every cover figure, order quantity and urgency band follows one recipe: <strong>opening
-stock → <a class="xref" href="glossary.html#projection"><code>projection.project</code></a>
-over periods from a <a class="xref" href="glossary.html#demandseries"><code>DemandSeries</code></a>,
-with arrivals from <a class="xref" href="glossary.html#inbound-grade">inbound grading</a> →
-take a <a class="xref" href="glossary.html#reading">reading</a>.</strong></p>
-<pre><code> daily_sales ─────────────────────────────► demand.channel_demand ──┐
- daily_soh ─► monthly_warehouse_velocity ─► demand.warehouse_demand ┤
-                                                                    ▼
-                         demand.location_demand (picks basis per location from market_config)
-                                                                    │ DemandSeries
- POs / TOs / JAS ledger / Amazon counters / FBA shipments           │
-        ─► inbound_grading ─► arrivals (weighted, dated)            │
-                                                                    ▼
- opening SOH (inventory_levels.quantityavailable, Amazon overlay) ─► projection.project(...)
-                                                                    ▼
-   readings: weeks_of_cover(cap 52) · deficit_against(floor, from_period=transit)
-             · min_point · gap_before · first_stockout
-                                                                    ▼
-   cover on Dashboard / All SKUs / Alerts / Overstock / Velocity
-   quantities on Transfers / Replenishment / Factory Buy</code></pre>
-<p class="sans" style="color:var(--muted); font-size:.88rem;">"Policy goes in the inputs
-(periods, arrivals, floor), never in a forked loop." — the design rule from
-<code>PROJECTION-ALIGNMENT-PLAN.md</code>.</p>
+stock + a <a class="xref" href="glossary.html#demandseries"><code>DemandSeries</code></a> +
+<a class="xref" href="glossary.html#arrivals">graded arrivals</a> →
+<a class="xref" href="glossary.html#projection"><code>projection.project</code></a> → a
+<a class="xref" href="glossary.html#reading">reading</a></strong>, then policy, then review rules.</p>
+<pre><code> daily_sales ─► monthly_velocity ─► demand.channel_demand ─────────┐   one-offs split off,
+ daily_soh ──► monthly_warehouse_velocity ─► demand.warehouse_demand ┤   level rules, planned
+                                                                     ▼   adjustments attached
+              demand.location_demand  (basis per location from market_config)
+                                                                     │ DemandSeries
+ inbound_shipment_po (shipping master, first) · open POs it doesn't  │
+ describe · Amazon TO shipment lots · open TOs                       │
+        ─► inbound_grading ─► arrivals (graded, dated, weighted)     │
+                                                                     ▼
+ opening stock (inventory_levels.quantityavailable; Amazon fulfillable) ─► project(...)
+                                                                     ▼
+   readings: weeks_of_cover(cap 52) · deficit_against(floor, from_period) · min_point · gap_before
+                                                                     ▼
+   policy:   source caps − e-com reserves · case packs · range gates (sku_range)
+             · compliance holds · launch overrides
+                                                                     ▼
+   review rules (flag, never move a quantity): replenishment_rules · transfer_rules · factory_buy_rules</code></pre>
+<p class="sans" style="color:var(--muted); font-size:.88rem;"><code>projection.py</code> has not
+changed since <code>0b134ca</code> (1 Oct 2026). "Policy goes in the inputs (periods, arrivals,
+floor), never in a forked loop." A few figures are still plain division (stock ÷ trailing
+rate); the register is <code>forecast-calculations.md:683-727</code>.</p>
 
-<h2><span class="n">3</span> Layer → where it lives in the repo</h2>
+<h2><span class="n">3</span> Box → where it lives in the repo</h2>
 <table class="ref">
   <thead><tr><th>Path</th><th>Job</th><th>Touch</th></tr></thead>
   <tbody>
-    <tr class="grp"><td colspan="3">① Sync</td></tr>
-    <tr><td class="file">backend/app/services/databricks_sync.py</td>
-        <td>The sync steps; orchestrators <code>run_initial_sync</code> / <code>run_incremental_sync</code> at the bottom.</td>
+    <tr class="grp"><td colspan="3">1 · Sync</td></tr>
+    <tr><td class="file wrap">backend/app/services/databricks_sync.py</td>
+        <td>Every step; orchestrators <code>run_initial_sync</code> (<code>:2100</code>) and <code>run_incremental_sync</code> (<code>:2150</code>) at the bottom; <code>reap_stale_syncs</code> (<code>:45</code>).</td>
         <td><span class="b b-glance">warm</span></td></tr>
-    <tr><td class="file">backend/app/routers/sync.py</td>
-        <td><code>SYNC_STEPS</code> list the Settings panel renders; trigger / progress endpoints.</td>
+    <tr><td class="file wrap">backend/app/routers/sync.py</td>
+        <td><code>SYNC_STEPS</code> (<code>:30</code>, mirrored in <code>Settings.tsx:52</code>); trigger, progress, last sync.</td>
         <td><span class="b b-glance">warm</span></td></tr>
-    <tr class="grp"><td colspan="3">② Storage</td></tr>
-    <tr><td class="file">backend/alembic/versions/</td>
-        <td>36 migrations on origin/main (35 locally); schema <em>and</em> data fixes; run on every container start.</td>
-        <td><span class="b b-glance">warm</span></td></tr>
-    <tr><td class="file">backend/app/models/</td>
-        <td>One SQLAlchemy model per table.</td>
-        <td><span class="b b-glance">warm</span></td></tr>
-    <tr><td class="file">backend/app/seed.py</td>
-        <td>Startup bootstrap; runs on <em>every</em> start (admin user, thresholds, polybag list).</td>
+    <tr><td class="file wrap">backend/app/services/cache_warmup.py</td>
+        <td>The last sync step: recompute every cached page for every market.</td>
         <td><span class="b b-noise">cold</span></td></tr>
-    <tr class="grp"><td colspan="3">③ API + Engine</td></tr>
-    <tr><td class="file">backend/app/main.py</td>
-        <td>FastAPI app, lifespan scheduler (:37), router mounts (:81-84), SPA static serving.</td>
-        <td><span class="b b-noise">cold</span></td></tr>
-    <tr><td class="file">backend/app/routers/</td>
-        <td>HTTP surface: <code>dashboard.py</code> (most pages), <code>admin.py</code>, <code>sync.py</code>, <code>auth.py</code>. Some heavy logic sits inline.</td>
-        <td><span class="b b-read">hot</span></td></tr>
-    <tr><td class="file">backend/app/services/</td>
-        <td>The engines: <code>projection</code>, <code>demand</code>, <code>inbound_grading</code>, <code>warehouse_velocity</code>, <code>fba_replenishment</code>, <code>transfers</code>, <code>factory_buy</code>, <code>alerts</code>, <code>market_config</code>, <code>cache</code>…</td>
-        <td><span class="b b-read">hot</span></td></tr>
-    <tr><td class="file">backend/app/schemas/</td>
-        <td>Pydantic response models. A field the engine returns but a schema omits is silently dropped.</td>
-        <td><span class="b b-read">hot</span></td></tr>
-    <tr><td class="file">backend/app/middleware/auth.py</td>
-        <td>Token validation (Entra / dev), role dependencies, <code>get_market_param</code>.</td>
-        <td><span class="b b-noise">cold</span></td></tr>
-    <tr><td class="file">backend/app/tools/</td>
-        <td><code>compare_projections.py</code>: the <a class="xref" href="glossary.html#harness">harness</a>, the only regression gate.</td>
+    <tr class="grp"><td colspan="3">2 · Store</td></tr>
+    <tr><td class="file wrap">backend/alembic/versions/</td>
+        <td><code>001</code>…<code>056</code> plus two hash-named; schema <em>and</em> data migrations; run on every start. Check the head on <code>main</code> before numbering.</td>
         <td><span class="b b-glance">warm</span></td></tr>
-    <tr class="grp"><td colspan="3">④ UI</td></tr>
-    <tr><td class="file">frontend/src/pages/</td>
-        <td>16 page components; state in <code>useState</code>, data via <code>useEffect</code> + typed fetchers.</td>
-        <td><span class="b b-read">hot</span></td></tr>
-    <tr><td class="file">frontend/src/api/</td>
-        <td>Axios client + interceptors (market param, Bearer token, 401 retry); typed fetchers.</td>
+    <tr><td class="file wrap">backend/app/models/</td>
+        <td>36 model files, 38 tables; its <code>CLAUDE.md</code> describes each and lists the dead ones.</td>
         <td><span class="b b-glance">warm</span></td></tr>
-    <tr><td class="file">frontend/src/types/index.ts</td>
+    <tr><td class="file wrap">backend/app/seed.py</td>
+        <td>Runs on <em>every</em> start: bootstrap user, per-market config rows, thresholds, polybag flags, CSV seeds.</td>
+        <td><span class="b b-noise">cold</span></td></tr>
+    <tr class="grp"><td colspan="3">3 · Engine</td></tr>
+    <tr><td class="file wrap">backend/app/services/</td>
+        <td>The engines (§5). Its <code>CLAUDE.md</code> is the best single module map.</td>
+        <td><span class="b b-read">hot</span></td></tr>
+    <tr><td class="file wrap">backend/app/services/market_config.py</td>
+        <td>Every location, hub, route, transit and FBM mapping per market (<code>:60-219</code>).</td>
+        <td><span class="b b-glance">warm</span></td></tr>
+    <tr><td class="file wrap">backend/app/tools/compare_projections.py</td>
+        <td>The <a class="xref" href="glossary.html#harness">harness</a>: <code>dump</code> / <code>compare</code>, the regression gate.</td>
+        <td><span class="b b-glance">warm</span></td></tr>
+    <tr class="grp"><td colspan="3">4 · API</td></tr>
+    <tr><td class="file wrap">backend/app/main.py</td>
+        <td>App, lifespan (reaper, scheduler <code>:40-41</code>, MCP session), routers <code>:91-94</code>, MCP route <code>:106-114</code>, SPA <code>:117-131</code>.</td>
+        <td><span class="b b-noise">cold</span></td></tr>
+    <tr><td class="file wrap">backend/app/routers/</td>
+        <td><code>dashboard.py</code> (1,696 lines: page reads + order API), <code>admin.py</code>, <code>sync.py</code>, <code>auth.py</code>. Some heavy logic still inline.</td>
+        <td><span class="b b-read">hot</span></td></tr>
+    <tr><td class="file wrap">backend/app/schemas/</td>
+        <td>Pydantic response models. A field the service returns but a schema omits is silently dropped.</td>
+        <td><span class="b b-read">hot</span></td></tr>
+    <tr><td class="file wrap">backend/app/services/cache.py</td>
+        <td><code>CALC_BASIS_VERSION</code> (<code>:20</code>), <code>make_key</code>, <code>invalidate</code>, <code>invalidate_endpoint</code>.</td>
+        <td><span class="b b-glance">warm</span></td></tr>
+    <tr><td class="file wrap">backend/app/middleware/auth.py</td>
+        <td>Token validation, reader scope (<code>:19-45</code>), <code>require_admin</code> / <code>require_role</code>, <code>get_market_param</code> (<code>:216</code>).</td>
+        <td><span class="b b-noise">cold</span></td></tr>
+    <tr><td class="file wrap">backend/app/mcp/</td>
+        <td><code>server.py</code>, <code>auth.py</code>, <code>tools.py</code>, <code>limits.py</code>: the second front door.</td>
+        <td><span class="b b-noise">cold</span></td></tr>
+    <tr class="grp"><td colspan="3">5 · UI</td></tr>
+    <tr><td class="file wrap">frontend/src/pages/</td>
+        <td>18 routed pages + Login + NotFound. State in <code>useState</code>, data in <code>useEffect</code> keyed on <code>market</code>.</td>
+        <td><span class="b b-read">hot</span></td></tr>
+    <tr><td class="file wrap">frontend/src/App.tsx</td>
+        <td>Routes (<code>:123-155</code>); <code>ProtectedRoute</code> (<code>:66</code>), <code>RequireNonViewer</code>.</td>
+        <td><span class="b b-noise">cold</span></td></tr>
+    <tr><td class="file wrap">frontend/src/api/</td>
+        <td><code>client.ts</code> interceptors (<code>?market=</code> <code>:32-39</code>, Bearer <code>:41-64</code>, 401 retry + save-error toast <code>:66-108</code>); typed fetchers.</td>
+        <td><span class="b b-glance">warm</span></td></tr>
+    <tr><td class="file wrap">frontend/src/types/index.ts</td>
         <td>Hand-mirrored response types; must match <code>schemas/</code> (no codegen).</td>
         <td><span class="b b-read">hot</span></td></tr>
-    <tr><td class="file">frontend/src/stores/</td>
-        <td>Zustand: <code>authStore</code>, <code>marketStore</code> (selected market, persisted).</td>
+    <tr><td class="file wrap">frontend/src/stores/</td>
+        <td>Zustand: <code>authStore</code>, <code>marketStore</code> (selected market persisted in localStorage).</td>
         <td><span class="b b-noise">cold</span></td></tr>
-    <tr><td class="file">frontend/src/components/</td>
-        <td>Shared UI; <code>Layout.tsx</code> holds the sidebar and the <a class="xref" href="glossary.html#changelog">CHANGELOG</a> (version of record).</td>
+    <tr><td class="file wrap">frontend/src/components/Layout.tsx</td>
+        <td>Sidebar, <code>navGroups</code> (<code>:626</code>), and the user-facing <a class="xref" href="glossary.html#changelog">CHANGELOG</a> (version of record).</td>
         <td><span class="b b-glance">warm</span></td></tr>
-    <tr class="grp"><td colspan="3">Infra &amp; docs</td></tr>
-    <tr><td class="file">bitbucket-pipelines.yml</td>
-        <td>On push to <code>main</code>: build, push to ECR, run <code>scripts/deploy.sh</code>. No test/lint step.</td>
+    <tr class="grp"><td colspan="3">Infra</td></tr>
+    <tr><td class="file wrap">bitbucket-pipelines.yml · scripts/deploy.sh</td>
+        <td>On push to <code>main</code>: build, push to ECR, SSM <code>compose up -d</code>. No Python check step.</td>
         <td><span class="b b-noise">cold</span></td></tr>
-    <tr><td class="file">Dockerfile · docker-compose.yml</td>
-        <td>Root <code>Dockerfile</code> = prod image (React build + Python). <code>docker-compose.yml</code> = dev stack. <code>docker-compose.prod.yml</code> / <code>Caddyfile</code> are stale reference copies.</td>
+    <tr><td class="file wrap">Dockerfile · docker-compose.yml</td>
+        <td>Root <code>Dockerfile</code> = prod image (node build + python). <code>docker-compose.yml</code> = dev stack (project <code>dreamcast</code>). <code>docker-compose.prod.yml</code>, <code>Caddyfile</code> and the <code>Dockerfile.prod</code>s are stale; the real prod files live on the host.</td>
         <td><span class="b b-noise">cold</span></td></tr>
-    <tr><td class="file">CLAUDE.md</td>
-        <td>~120 KB operating notes, release checklist, gotchas. Partly stale; code wins.</td>
+    <tr class="grp"><td colspan="3">Docs (after the 9 Nov 2026 restructure)</td></tr>
+    <tr><td class="file wrap">CLAUDE.md (root, 5 KB)</td>
+        <td>What DreamCast is, the routing table to per-directory docs, rules that apply everywhere, markets, versioning.</td>
         <td><span class="b b-glance">warm</span></td></tr>
-    <tr><td class="file">PROJECTION-ALIGNMENT-PLAN.md</td>
-        <td>Why the engine is one primitive; Matt's business decisions; progress log.</td>
+    <tr><td class="file wrap in1">backend/CLAUDE.md · services/ · routers/ · models/ · frontend/CLAUDE.md</td>
+        <td>Per-directory rules; they auto-load for an agent working in that folder. Describe current behaviour only.</td>
         <td><span class="b b-glance">warm</span></td></tr>
+    <tr><td class="file wrap">forecast-calculations.md</td>
+        <td>How every figure is calculated, per market; quirks; the plain-division register; constants.</td>
+        <td><span class="b b-read">hot</span></td></tr>
+    <tr><td class="file wrap">CHANGELOG.md</td>
+        <td>Developer history, newest first, with harness numbers on the day.</td>
+        <td><span class="b b-glance">warm</span></td></tr>
+    <tr><td class="file wrap">.claude/skills/</td>
+        <td><code>release</code>, <code>prod-ops</code>, <code>test-branch-stack</code>, <code>projection-harness</code>: the procedures.</td>
+        <td><span class="b b-glance">warm</span></td></tr>
+    <tr><td class="file wrap">*-PLAN.md</td>
+        <td>Open workstreams and history: <code>PROJECTION-ALIGNMENT-PLAN.md</code>, <code>MCP-PLAN.md</code>, <code>STOCK-ROLLING-PLAN.md</code>, <code>MERCH-ROADMAP.md</code>, …</td>
+        <td><span class="b b-noise">cold</span></td></tr>
   </tbody>
 </table>
 
-<h2><span class="n">4</span> Page → endpoint → service → core</h2>
+<h2><span class="n">4</span> Page → endpoint → service → reading</h2>
+<p class="sans" style="color:var(--muted); font-size:.88rem;">Endpoints are under
+<code>/api/dashboard</code> unless noted; line numbers are in <code>routers/dashboard.py</code>.
+<strong>C</strong> = response-cached.</p>
 <table class="ref">
-  <thead><tr><th>Page (route)</th><th>Endpoint(s)</th><th>Router → service</th><th>Core reading</th></tr></thead>
+  <thead><tr><th>Page (route)</th><th>Endpoint</th><th>Service</th><th>Reading</th></tr></thead>
   <tbody>
-    <tr><td class="file">Dashboard (/)</td>
-        <td class="file">GET /api/dashboard/stock-cover · /summary</td>
-        <td><code>dashboard.py:94</code> → <code>warehouse_velocity.get_batch_seasonal_woc</code> (:310) + <code>burndown.get_batch_us_total_seasonal_woc</code> (:594)</td>
-        <td><code>weeks_of_cover(cap=52)</code></td></tr>
-    <tr><td class="file">All SKUs (/all-skus)</td>
-        <td class="file">same as Dashboard</td>
-        <td>same handler; per-channel columns are plain division</td>
-        <td><code>weeks_of_cover</code></td></tr>
-    <tr><td class="file">Alerts (/alerts)</td>
-        <td class="file">GET /api/dashboard/alerts</td>
-        <td><code>dashboard.py:229</code> → <code>alerts.get_alerts</code> (:34), same two cover functions</td>
-        <td><code>weeks_of_cover</code> → severity vs <code>alert_thresholds</code></td></tr>
-    <tr><td class="file">Transfers (/transfers)</td>
-        <td class="file">GET /api/dashboard/transfers · /transfer-routes</td>
-        <td><code>dashboard.py:567</code> → <code>transfers.get_transfer_recommendations</code> (:122)</td>
-        <td><code>deficit_against(0 or floor, from_period=transit)</code></td></tr>
-    <tr><td class="file">Replenishment (/fba)</td>
-        <td class="file">GET /fba-replenishment · /replenishment-orders/* · /fba-config</td>
-        <td><code>dashboard.py:678</code> → <code>fba_replenishment.get_fba_replenishment_recommendations</code> (:238) → <code>_run_burndown_need</code> (:171); orders via <code>replenishment_orders.calculate_order</code> (:104)</td>
-        <td><code>deficit_against(fee floor)</code> · <code>gap_before</code></td></tr>
-    <tr><td class="file">Factory Buy (/factory-buy)</td>
-        <td class="file">GET /api/dashboard/factory-buy</td>
-        <td><code>dashboard.py:771</code> → <code>factory_buy.get_factory_buy_recommendations</code> (:79)</td>
-        <td><code>project()</code> per month; month-end WoC is plain division</td></tr>
-    <tr><td class="file">Velocity (/velocity?sku=)</td>
-        <td class="file">GET /velocity · /inventory-levels · /warehouse-burndown · /stock-cover</td>
-        <td><code>dashboard.py:256</code> → <code>velocity.get_velocity_detail</code> (:351); <code>:345</code> (inline, calls <code>get_batch_seasonal_woc</code> at :436); <code>:319</code> → <code>burndown.calculate_warehouse_burndown</code> (:462)</td>
-        <td>projection lines + <code>weeks_of_cover</code></td></tr>
-    <tr><td class="file">Settings sync panel (/settings)</td>
-        <td class="file">GET /api/sync/progress · /data-overview · POST /trigger · /trigger-initial</td>
-        <td><code>sync.py:95</code>, <code>:184</code>, <code>:67</code>, <code>:81</code> → <code>databricks_sync.run_incremental_sync</code> (:1703) / <code>run_initial_sync</code> (:1674) in a daemon thread</td>
-        <td>— (writes <code>sync_log</code>)</td></tr>
+    <tr class="grp"><td colspan="4">Dashboard</td></tr>
+    <tr><td>Dashboard <code>/</code></td><td class="file wrap">/stock-cover :105 C · /summary :582 C</td>
+        <td><code>warehouse_velocity.get_batch_seasonal_woc</code> :310 + <code>burndown.get_batch_us_total_seasonal_woc</code> :602</td><td><code>weeks_of_cover(cap=52)</code></td></tr>
+    <tr class="grp"><td colspan="4">Operations</td></tr>
+    <tr><td>Replenishment <code>/fba</code></td><td class="file wrap">/fba-replenishment :741 C · /replenishment-orders* :1252-1450 · /fba-replenishment/preview :1228</td>
+        <td><code>fba_replenishment.get_fba_replenishment_recommendations</code> :295 → <code>_run_burndown_need</code> :186; <code>replenishment_orders.calculate_order</code> :382</td><td><code>deficit_against(fee floor, from_period=transit)</code> · <code>gap_before</code></td></tr>
+    <tr><td>Transfers <code>/transfers</code></td><td class="file wrap">/transfers :627 C · /transfer-routes :620</td>
+        <td><code>transfers.get_transfer_recommendations</code> :93; <code>transfer_rules.py</code></td><td><code>deficit_against(0 or floor)</code> at the destination</td></tr>
+    <tr><td>Inbound <code>/inbound</code></td><td class="file wrap">/inbound :1488 C</td>
+        <td><code>inbound_view.build_inbound_view</code> :239 (same graded lots)</td><td>grades, counted vs held back</td></tr>
+    <tr><td>Compliance <code>/compliance</code></td><td class="file wrap">/compliance :1641 · /api/admin/compliance*</td>
+        <td><code>compliance.get_compliance_register</code> :289; <code>derive_hold</code> :78</td><td>— (holds feed replenishment)</td></tr>
+    <tr class="grp"><td colspan="4">Merch planning</td></tr>
+    <tr><td>Factory Buy <code>/factory-buy</code></td><td class="file wrap">/factory-buy :837 C · /demand-adjustments :1679</td>
+        <td><code>factory_buy.get_factory_buy_recommendations</code> :311 (retail weeks, <code>retail_calendar.py</code>); <code>factory_buy_rules.py</code></td><td>market-total projection; order to target cover × run rate</td></tr>
+    <tr><td>Range <code>/range</code></td><td class="file wrap">/sku-range :1555 · /range-exceptions :1581 C · /api/admin/sku-range*</td>
+        <td><code>sku_range.build_range_items</code> :521; <code>range_exceptions.build_exceptions</code> :187</td><td>— (the record)</td></tr>
+    <tr><td>Alerts <code>/alerts</code></td><td class="file wrap">/alerts :243 C</td>
+        <td><code>alerts.get_alerts</code> :34 vs <code>alert_thresholds</code> (by warehouse name)</td><td><code>weeks_of_cover</code></td></tr>
+    <tr><td>Out of Stock <code>/out-of-stock</code></td><td class="file wrap">/stock-cover (client-side)</td>
+        <td>none: <code>OutOfStock.tsx</code> turns cover into a date</td><td><code>weeks_of_cover</code></td></tr>
+    <tr><td>Overstock <code>/overstock</code></td><td class="file wrap">/overstock :681 C</td>
+        <td><code>overstock.get_overstock_analysis</code> :33</td><td>cover vs 10 (WG) / 30 weeks; hybrid excess</td></tr>
+    <tr><td>Stock Review <code>/stock-review</code></td><td class="file wrap">/stage-summary :1004</td>
+        <td>inline in the router</td><td>mostly plain division</td></tr>
+    <tr><td>All SKUs <code>/all-skus</code></td><td class="file wrap">/stock-cover + /sku-range · PUT /api/admin/sku-range, /sku-master</td>
+        <td>as Dashboard; the attribute editor</td><td><code>weeks_of_cover</code>; channel columns plain division</td></tr>
+    <tr class="grp"><td colspan="4">Analysis</td></tr>
+    <tr><td>Velocity <code>/velocity?sku=</code></td><td class="file wrap">/velocity :277 · /inventory-levels :366 · /warehouse-burndown :340 · /burndown :319</td>
+        <td><code>velocity.get_velocity_detail</code> :248; <code>burndown.calculate_warehouse_burndown</code> :470</td><td>projection lines + <code>weeks_of_cover</code></td></tr>
+    <tr><td>Amazon Stock Gap <code>/amazon-stock</code></td><td class="file wrap">/amazon-stock-gap :547 C</td>
+        <td><code>amazon_stock_gap.get_amazon_stock_gaps</code> :84</td><td>NetSuite vs Amazon reconciliation</td></tr>
+    <tr><td>FBA/FBM <code>/fba-mix</code></td><td class="file wrap">/fba-replenishment</td><td>read-only view of the replenishment payload</td><td>—</td></tr>
+    <tr><td>Product Perf <code>/product-performance</code></td><td class="file wrap">/product-performance :814 C</td>
+        <td><code>product_performance.get_product_performance</code> :93</td><td>style WoC plain division</td></tr>
+    <tr><td>YoY Compare <code>/yoy</code></td><td class="file wrap">/yoy-comparison :889</td><td>inline in the router</td><td>—</td></tr>
+    <tr class="grp"><td colspan="4">Settings</td></tr>
+    <tr><td>Settings <code>/settings</code></td><td class="file wrap">/api/sync/progress :112 · /trigger :84 · /trigger-initial :98 · /api/admin/users…</td>
+        <td><code>run_incremental_sync</code> / <code>run_initial_sync</code> in a daemon thread</td><td>— (writes <code>sync_log</code>)</td></tr>
   </tbody>
 </table>
 
-<h2><span class="n">5</span> The sync, step by step (origin/main = production)</h2>
+<h2><span class="n">5</span> The engine modules, by role</h2>
 <table class="ref">
-  <thead><tr><th>#</th><th>Step</th><th>Source (<code>dwh.</code>…)</th><th>Target</th><th>Mode</th></tr></thead>
+  <thead><tr><th>Role</th><th>Module</th><th>One line</th></tr></thead>
   <tbody>
-    <tr><td>0</td><td class="file">cluster_warmup</td><td>—</td><td>—</td><td>probe; wait 8 min if cold</td></tr>
-    <tr><td>1</td><td class="file">daily_sales</td><td class="file">netsuite.gold_netsuite_daily_sales_by_customer</td><td class="file">daily_sales → monthly_velocity</td><td>upsert, last 7 days; FBM relabel</td></tr>
-    <tr><td>2</td><td class="file">daily_soh</td><td class="file">merch.mssi_daily_soh_actual</td><td class="file">daily_soh → monthly_warehouse_velocity</td><td>upsert, last 45 days</td></tr>
-    <tr><td>3</td><td class="file">open_purchase_orders</td><td class="file">netsuite.silver_open_purchase_orders</td><td class="file">open_purchase_orders</td><td>full replace</td></tr>
-    <tr><td>4</td><td class="file">transfer_orders</td><td class="file">netsuite.silver_netsuite_transfer_orders</td><td class="file">transfer_orders</td><td>full replace</td></tr>
-    <tr><td>5</td><td class="file">inventory_levels</td><td class="file">netsuite.silver_netsuite_inventory_levels</td><td class="file">inventory_levels</td><td>full replace</td></tr>
-    <tr><td>6</td><td class="file">product_names</td><td class="file">netsuite.silver_netsuite_items</td><td class="file">sku_master (name, tog)</td><td>fill gaps; errors swallowed</td></tr>
-    <tr><td>7</td><td class="file">carton_quantities</td><td class="file">netsuite2.silver_netsuite2_item</td><td class="file">sku_master.box_quantity</td><td>update; errors swallowed</td></tr>
-    <tr><td>8</td><td class="file">sku_statuses</td><td class="file">merch.best_seller_sku_status</td><td class="file">sku_market_status</td><td>full replace; errors swallowed</td></tr>
-    <tr><td>9</td><td class="file">amazon_sku_mapping</td><td class="file">amazon_seller_central.silver_amazon_netsuite_sku_mapping</td><td class="file">amazon_sku_mapping</td><td>full replace (US only)</td></tr>
-    <tr><td>10</td><td class="file">amazon_range</td><td class="file">merch.amazon_sku_status</td><td class="file">amazon_range</td><td>upsert (US only)</td></tr>
-    <tr><td>11</td><td class="file">amazon_fba_inventory</td><td class="file">amazon_seller_central.gold_amazon_fba_inventory</td><td class="file">amazon_fba_inventory</td><td>full replace</td></tr>
-    <tr><td>12</td><td class="file">amazon_awd_inventory</td><td class="file">amazon_seller_central.gold_amazon_awd_inventory</td><td class="file">amazon_awd_inventory</td><td>full replace</td></tr>
-    <tr><td>13</td><td class="file">amazon_listing_issues</td><td class="file">amazon_seller_central.silver_amazon_listing_issue</td><td class="file">amazon_listing_issue</td><td>full replace</td></tr>
-    <tr><td>14</td><td class="file">amazon_compliance_register</td><td class="file">amazon_seller_central.gold_amazon_compliance_register</td><td class="file">amazon_compliance_register</td><td>full replace + derive holds</td></tr>
-    <tr><td>15</td><td class="file">amazon_fba_inbound</td><td class="file">amazon_seller_central.gold_amazon_fba_inbound</td><td class="file">amazon_fba_inbound</td><td>full replace</td></tr>
-    <tr><td>16</td><td class="file">amazon_fba_shipments</td><td class="file">amazon_seller_central.gold_amazon_fba_shipments</td><td class="file">amazon_fba_shipment</td><td>full replace (origin/main only)</td></tr>
-    <tr><td>17</td><td class="file">amazon_fba_lead_times</td><td class="file">amazon_seller_central.gold_amazon_fba_lead_times</td><td class="file">amazon_fba_lead_time</td><td>full replace</td></tr>
+    <tr><td>Registry</td><td class="file wrap">market_config.py</td><td>Per-market constants: locations, hubs, endpoints, PO-receiving locations, routes, dashboard columns.</td></tr>
+    <tr><td rowspan="5">Core model</td><td class="file wrap">projection.py</td><td>The primitive: <code>project()</code> :241 and its readings :168-238.</td></tr>
+    <tr><td class="file wrap">demand.py</td><td><code>DemandSeries</code> :412, <code>location_demand</code> :1140, <code>channel_demand</code> :836, seasonal algorithm :246-410, one-offs, few-sales, intermittent, sibling launches; constants :40-143.</td></tr>
+    <tr><td class="file wrap">inbound_grading.py</td><td><code>grade_inbound</code> :418, <code>graded_incoming_by_location</code> :528, <code>graded_incoming_market_total</code> :638, shipping master lots :335.</td></tr>
+    <tr><td class="file wrap">warehouse_velocity.py · burndown.py</td><td>Per-warehouse cover (<code>_cover_for</code> :416); market-total cover and burndown charts.</td></tr>
+    <tr><td class="file wrap">stock_cover.py · case_packs.py · retail_calendar.py · demand_adjustments.py</td><td>Opening stock and e-com reserves; rounding, caps, buffers; Sat–Fri weeks, 4-4-5 months; planned adjustments.</td></tr>
+    <tr><td>Quantity engines</td><td class="file wrap">fba_replenishment.py · transfers.py · factory_buy.py · amazon_launch.py</td><td>Amazon FBA / The Iconic; own-warehouse transfers; the factory buy and its split; New to Amazon launches.</td></tr>
+    <tr><td>Order workflow</td><td class="file wrap">replenishment_orders.py · order_permissions.py · order_events.py</td><td>Weekly order persistence, stages, approvals, export, MCP preview/apply; role checks; audit trail.</td></tr>
+    <tr><td>Review rules</td><td class="file wrap">replenishment_rules.py · transfer_rules.py · factory_buy_rules.py</td><td>Flag lines with reasons; never move a quantity.</td></tr>
+    <tr><td>The record</td><td class="file wrap">sku_range.py · sku_status.py · compliance.py</td><td>Ranging and statuses (the file seeds, a decision wins); status lookup; hold rule and compliance sync onto <code>sku_range</code>.</td></tr>
+    <tr><td>Views</td><td class="file wrap">alerts · overstock · product_performance · amazon_stock_gap · range_exceptions · inbound_view · replenishment_preview</td><td>Page payloads.</td></tr>
+    <tr><td>Plumbing</td><td class="file wrap">databricks_sync.py · cache.py · cache_warmup.py · auth_service.py</td><td>Sync; response cache; warm-up; password hashing and dev tokens.</td></tr>
   </tbody>
 </table>
-<p class="sans" style="color:var(--muted); font-size:.88rem;">Steps 6–8 log and continue
-on error; every other step aborts the run. The response cache is invalidated only after the
-<em>last</em> step succeeds. Every source is a cross-repo contract with
-<code>ltd-dbx-asset-bundle</code>.</p>
 
-<h2><span class="n">6</span> The maintainer's three rules</h2>
+<h2><span class="n">6</span> The sync, step by step</h2>
+<table class="ref">
+  <thead><tr><th>#</th><th>Step</th><th>Source (<code>dwh.</code>…)</th><th>Target · mode</th><th>On error</th></tr></thead>
+  <tbody>
+    <tr><td>0</td><td class="file wrap">cluster_warmup</td><td><code>SELECT 1</code></td><td>probe; if ≥ 30 s, wait 8 min</td><td>abort</td></tr>
+    <tr><td>1</td><td class="file wrap">daily_sales</td><td class="file wrap">netsuite.gold_netsuite_daily_sales_by_customer</td><td><code>daily_sales</code> upsert from latest − 7 days; FBM + EMEA relabel; rebuild <code>monthly_velocity</code></td><td>abort</td></tr>
+    <tr><td>2</td><td class="file wrap">daily_soh</td><td class="file wrap">merch.mssi_daily_soh_actual</td><td><code>daily_soh</code> upsert from latest − 45 days; rebuild <code>monthly_warehouse_velocity</code></td><td>abort</td></tr>
+    <tr><td>3</td><td class="file wrap">open_purchase_orders</td><td class="file wrap">netsuite.silver_open_purchase_orders</td><td>full replace</td><td>abort</td></tr>
+    <tr><td>4</td><td class="file wrap">transfer_orders</td><td class="file wrap">netsuite.silver_netsuite_transfer_orders</td><td>full replace (open statuses)</td><td>abort</td></tr>
+    <tr><td>5</td><td class="file wrap">inventory_levels</td><td class="file wrap">netsuite.silver_netsuite_inventory_levels</td><td>full replace (incl. <code>safetystocklevel</code>)</td><td>abort</td></tr>
+    <tr><td>6</td><td class="file wrap">product_names</td><td class="file wrap">netsuite.silver_netsuite_items</td><td><code>sku_master</code> name, TOG (fill gaps)</td><td>continue</td></tr>
+    <tr><td>7</td><td class="file wrap">carton_quantities</td><td class="file wrap">netsuite2.silver_netsuite2_item</td><td><code>sku_master.box_quantity</code>, carton dimensions</td><td>continue</td></tr>
+    <tr><td>8</td><td class="file wrap">sku_statuses</td><td class="file wrap">merch.best_seller_sku_status</td><td>mirror <code>sku_market_status</code>; seed <code>sku_range</code> NULLs only</td><td>continue</td></tr>
+    <tr><td>9</td><td class="file wrap">amazon_sku_mapping</td><td class="file wrap">amazon_seller_central.gold_netsuite_to_amazon_sku (+ a checked-in CA CSV)</td><td>full replace</td><td>abort</td></tr>
+    <tr><td>10</td><td class="file wrap">amazon_fba_inventory</td><td class="file wrap">amazon_seller_central.gold_amazon_fba_inventory</td><td>full replace</td><td>abort</td></tr>
+    <tr><td>11</td><td class="file wrap">amazon_awd_inventory</td><td class="file wrap">amazon_seller_central.gold_amazon_awd_inventory</td><td>full replace (display only)</td><td>abort</td></tr>
+    <tr><td>12</td><td class="file wrap">amazon_listing_issues</td><td class="file wrap">amazon_seller_central.silver_amazon_listing_issue</td><td>full replace</td><td>abort</td></tr>
+    <tr><td>13</td><td class="file wrap">amazon_compliance_register</td><td class="file wrap">amazon_seller_central.gold_amazon_compliance_register (+ sales by ASIN)</td><td>full replace; derive holds; write <code>compliance_blocked</code> to <code>sku_range</code></td><td>abort</td></tr>
+    <tr><td>14</td><td class="file wrap">inbound_shipments</td><td class="file wrap">shipping.master_ns_jas_inbound_shipment_pos + amazon_seller_central.silver_amazonus_agl_bookings</td><td><code>inbound_shipment_po</code>, <code>agl_booking</code>: full replace</td><td>abort</td></tr>
+    <tr><td>15</td><td class="file wrap">amazon_fba_shipments</td><td class="file wrap">amazon_seller_central.gold_amazon_fba_shipments + silver_amazonus_awdshipments</td><td><code>amazon_fba_shipment</code> (kinds to / agl / awd)</td><td>abort</td></tr>
+    <tr><td>16</td><td class="file wrap">amazon_fba_lead_times</td><td class="file wrap">amazon_seller_central.gold_amazon_fba_lead_times</td><td>full replace</td><td>abort</td></tr>
+    <tr><td>—</td><td class="file wrap">invalidate_cache()</td><td></td><td>clear every cached response</td><td></td></tr>
+    <tr><td>17</td><td class="file wrap">cache_warmup</td><td></td><td>recompute every cached page, every market</td><td>swallowed</td></tr>
+  </tbody>
+</table>
+<p class="sans" style="color:var(--muted); font-size:.88rem;">An abort step stops the run
+<em>before</em> the cache is cleared, so cached pages keep the last good run's numbers. The
+sidebar's "Last sync" reads the latest completed step of any run; trust Settings' step list.
+A market with no rows switches the next run to a two-year pull (long). Syncs and SQL fixes run
+outside the app process never reach its cache: use Sync Now, or restart. Retired since October:
+<code>amazon_range</code>, <code>amazon_fba_inbound</code>.</p>
+
+<h2><span class="n">7</span> The store, by who writes it</h2>
+<table class="ref">
+  <thead><tr><th>Group</th><th>Tables</th><th>Written by</th></tr></thead>
+  <tbody>
+    <tr><td>Sales and stock mirrors</td><td class="file wrap">daily_sales, daily_soh, inventory_levels, open_purchase_orders, transfer_orders</td><td>sync</td></tr>
+    <tr><td>Rollups</td><td class="file wrap">monthly_velocity, monthly_warehouse_velocity</td><td>sync (after steps 1, 2)</td></tr>
+    <tr><td>Inbound mirrors</td><td class="file wrap">inbound_shipment_po, agl_booking, amazon_fba_shipment</td><td>sync</td></tr>
+    <tr><td>Amazon mirrors</td><td class="file wrap">amazon_fba_inventory, amazon_awd_inventory, amazon_listing_issue, amazon_compliance_register, amazon_asin_sales, amazon_fba_lead_time, amazon_sku_mapping</td><td>sync</td></tr>
+    <tr><td>SKU master</td><td class="file wrap">sku_master</td><td>seed (from sales) + sync (names, cartons) + admins (WG, split case)</td></tr>
+    <tr><td>Merch file mirror</td><td class="file wrap">sku_market_status</td><td>sync; only seeds <code>sku_range</code></td></tr>
+    <tr><td><strong>The record</strong></td><td class="file wrap">sku_range, demand_adjustments, replenishment_order, replenishment_order_item, replenishment_order_event, amazon_launch, compliance_cases, stock_reservations, fba_promo_calendar</td><td>planners and admins (orders also via MCP)</td></tr>
+    <tr><td>Config</td><td class="file wrap">fba_replenishment_config, sku_status_config, alert_thresholds, range_exception_config</td><td>seed + admins</td></tr>
+    <tr><td>System</td><td class="file wrap">users, sync_log</td><td>auth, sync</td></tr>
+    <tr><td>Dead</td><td class="file wrap">amazon_range, amazon_fba_inbound, agl_shipments, agl_po_shipment</td><td>nothing</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">8</span> Markets</h2>
+<table class="ref">
+  <thead><tr><th></th><th>US</th><th>AU</th><th>UK</th><th>EU</th><th>CA</th></tr></thead>
+  <tbody>
+    <tr><td>Hub</td><td>Riverside 124</td><td>Sydney LBO 4</td><td>UK E-Com 65</td><td>EU E-Com 86</td><td>CA NAFG 110</td></tr>
+    <tr><td>Others</td><td>Chicago 135, Amazon 98, Walmart 127</td><td>Sydney LB 5, AU Amazon 92, The Iconic 121</td><td>Backstock 104, NuOrder 105, Amazon 66</td><td>Backstock 107, NuOrder 108, Amazon 87</td><td>CA Amazon 125</td></tr>
+    <tr><td>PO-receiving</td><td>124, 98, 135</td><td>4</td><td>65</td><td>86</td><td>110</td></tr>
+    <tr><td>Transfer routes</td><td>Riverside → Chicago (E-Com × 0.75)</td><td>LBO ↔ LB (depletion)</td><td>E-Com → NuOrder</td><td>E-Com → NuOrder</td><td>none</td></tr>
+    <tr><td>Replenishment</td><td>Riverside → Amazon (3 wk)</td><td>LBO → Amazon AU; LB → The Iconic (2)</td><td>E-Com → Amazon UK (2)</td><td>E-Com → Amazon EU (2)</td><td>NAFG → Amazon CA (2)</td></tr>
+    <tr><td>Dashboard columns</td><td>Riverside, Chicago, Amazon, Walmart</td><td>Sydney LBO, Sydney LB</td><td>UK E-Com, NuOrder, Amazon</td><td>EU E-Com, NuOrder, Amazon</td><td>CA NAFG, CA Amazon</td></tr>
+    <tr><td>Range calls</td><td>merch file</td><td>seeded from sales (stopgap)</td><td>none</td><td>none</td><td>merch file, Amazon FBA only</td></tr>
+    <tr><td>Factory buy split</td><td>Chicago + Amazon + hub</td><td colspan="4">hub only</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="n">9</span> Roles (as designed)</h2>
+<table class="ref">
+  <thead><tr><th>Role</th><th>Can</th><th>Enforced by</th></tr></thead>
+  <tbody>
+    <tr><td class="file wrap">admin</td><td>everything; users, sync, FBA config, promos, status configs</td><td><code>require_admin</code></td></tr>
+    <tr><td class="file wrap">planner</td><td>all pages; orders, range, statuses, adjustments, compliance cases</td><td><code>require_role("admin","planner")</code> or checks in the handler</td></tr>
+    <tr><td class="file wrap">viewer</td><td>all pages except Overstock and Settings; no writes</td><td>route guards + handler checks</td></tr>
+    <tr><td class="file wrap">reader</td><td>GET only, on <code>READER_ALLOWED_PATHS</code>; default for any first sign-in, on every market</td><td><code>get_current_user</code> → <code>_enforce_reader_scope</code>, every router</td></tr>
+    <tr><td class="file wrap">is_approver</td><td>tick lines, approve, unlock the weekly order (a flag, independent of role)</td><td><code>order_permissions.can_approve_order</code></td></tr>
+  </tbody>
+</table>
+<p class="sans" style="color:var(--muted); font-size:.88rem;">Markets: <code>users.markets</code>
+(JSON list) → <code>get_market_param</code> (403 if not held, 400 if unknown). Every service
+defaults <code>market="US"</code>.</p>
+
+<h2><span class="n">10</span> Deploy and release</h2>
+<div class="pipe">
+  <span class="st">push to <code>main</code></span><span class="to"></span>
+  <span class="st">Pipelines: docker build</span><span class="to"></span>
+  <span class="st">ECR (:sha, :latest)</span><span class="to"></span>
+  <span class="st">SSM: pull + compose up -d</span><span class="to"></span>
+  <span class="st key">alembic → seed → uvicorn</span>
+</div>
+<ol class="sans" style="font-size:.88rem;">
+  <li>User-facing entry at the top of <code>CHANGELOG</code> in <code>Layout.tsx</code> (sidebar version) + developer entry in <code>CHANGELOG.md</code>.</li>
+  <li>Engine change: harness <code>dump</code> before and after, <code>compare</code>; bump <code>CALC_BASIS_VERSION</code> (<code>"YYYY-MM-DD.N"</code>).</li>
+  <li><code>npx eslint src/ &amp;&amp; npm run build</code>; <code>python -m compileall -q app</code>; linear migration chain.</li>
+  <li>Push; watch the pipeline; confirm live by a distinctive new string in the served JS bundle.</li>
+  <li>After deploy: recalculate the current weekly order; Sync Now if a fed table or market was added.</li>
+  <li>Rollback: revert and push, or re-tag an older <code>:sha</code> image as <code>latest</code> and <code>compose up -d</code>. Migrations go forward only in practice.</li>
+</ol>
+
+<h2><span class="n">11</span> The maintainer's rules</h2>
 <div class="keybox">
-  <p><strong>1 · No tests: the harness is the gate, and <code>main</code> is production.</strong>
-  Run <code>compare_projections dump</code> before and after any engine change; a push to
-  <code>main</code> deploys in about four minutes.</p>
+  <p><strong>1 · No test suite: the harness is the gate, and <code>main</code> is production.</strong>
+  The pipeline builds and ships; it never runs Python. A runtime error ships too.</p>
   <p><strong>2 · Every service defaults <code>market="US"</code>.</strong> Pass
-  <code>market=market</code> on every call, or AU silently returns empty or US-shaped data.</p>
-  <p><strong>3 · The response cache has no TTL.</strong> Bump
-  <a class="xref" href="glossary.html#calc-basis-version"><code>CALC_BASIS_VERSION</code></a>
-  with any rule change; out-of-band DB edits stay invisible until a sync, admin save or restart.</p>
+  <code>market=market</code> on every call, or a non-US market silently computes US.</p>
+  <p><strong>3 · The cache has no TTL and lives in process memory.</strong> Bump
+  <a class="xref" href="glossary.html#calc-basis-version"><code>CALC_BASIS_VERSION</code></a> with any
+  rule change; SQL fixes and out-of-process syncs need a restart or Sync Now.</p>
+  <p><strong>4 · The file seeds, a decision wins.</strong> The sync never overwrites a decision
+  stored in <code>sku_range</code>.</p>
+  <p><strong>5 · One worker, always.</strong> The scheduler, cache and rate limiters assume a
+  single process.</p>
 </div>
 
 <h3>Where to look when…</h3>
 <table class="ref">
-  <thead><tr><th>Symptom</th><th>Layer</th><th>Open first</th></tr></thead>
+  <thead><tr><th>Symptom</th><th>Box</th><th>Open first</th></tr></thead>
   <tbody>
-    <tr><td>The nightly sync didn't run, or a step is red in Settings</td><td>① Sync</td>
-        <td class="file">sync_log rows (Settings) → databricks_sync.py (that step's function)</td></tr>
-    <tr><td>A number looks wrong</td><td>③ Engine (then ② / ①)</td>
-        <td class="file">the page's endpoint in §4 → its service → demand / inbound_grading inputs</td></tr>
-    <tr><td>A page is blank or a column is empty</td><td>④ UI / ③ API</td>
-        <td class="file">browser network tab (500? field missing?) → schemas/ → types/index.ts</td></tr>
-    <tr><td>The deploy failed, or went green but the app 500s</td><td>Infra</td>
-        <td class="file">Bitbucket pipeline log → prod container logs over SSM (alembic / seed / import errors)</td></tr>
+    <tr><td>A step is red in Settings, or data looks old</td><td>1 Sync</td>
+        <td class="file wrap">sync_log → that step in databricks_sync.py</td></tr>
+    <tr><td>A number looks wrong</td><td>3 Engine</td>
+        <td class="file wrap">page's service (§4) → opening stock / demand / inbound_grading</td></tr>
+    <tr><td>Numbers didn't change after a fix</td><td>4 API (cache)</td>
+        <td class="file wrap">cache cleared since? CALC_BASIS_VERSION bumped?</td></tr>
+    <tr><td>A range call or status "reverted"</td><td>2 Store (record)</td>
+        <td class="file wrap">sku_range: status_manual, updated_by / updated_at</td></tr>
+    <tr><td>Works in US, empty elsewhere</td><td>3 Engine</td>
+        <td class="file wrap">missing market=market; market_config.py</td></tr>
+    <tr><td>Field in the JSON but not on the page</td><td>5 UI</td>
+        <td class="file wrap">types/index.ts → the page</td></tr>
+    <tr><td>Field computed but missing from the JSON</td><td>4 API</td>
+        <td class="file wrap">schemas/</td></tr>
+    <tr><td>403 for a user</td><td>4 API (auth)</td>
+        <td class="file wrap">middleware/auth.py: role, reader scope, user.markets</td></tr>
+    <tr><td>Deploy green, app 502/500</td><td>Infra</td>
+        <td class="file wrap">container logs over SSM (alembic, seed, import errors)</td></tr>
   </tbody>
 </table>
 
-<h2><span class="n">7</span> Newcomer reading order</h2>
+<h2><span class="n">12</span> Reading order</h2>
 <ol>
-  <li><code>CLAUDE.md</code> (in chunks) — the authoritative map, gotchas and release checklist.</li>
-  <li><code>backend/app/services/market_config.py</code> — every warehouse, route and ID; the vocabulary everything else uses.</li>
-  <li><code>PROJECTION-ALIGNMENT-PLAN.md</code> ("Why", "Target", "Decisions from the business") — why the code is shaped around one primitive.</li>
-  <li><code>backend/app/services/projection.py</code> — the ~300-line core; every number is a reading of <code>project()</code>.</li>
-  <li><code>backend/app/services/demand.py</code> — demand bases and the seasonal forecast (constants at the top).</li>
-  <li><code>backend/app/services/inbound_grading.py</code> — what incoming stock counts, and when it lands.</li>
-  <li><code>backend/app/services/warehouse_velocity.py</code> (<code>get_batch_seasonal_woc</code>, <code>_cover_for</code>) — how the cover figure on every page is produced.</li>
-  <li><code>backend/app/services/fba_replenishment.py</code> — the highest-stakes engine (weekly Amazon orders).</li>
-  <li><code>backend/app/services/transfers.py</code> + <code>case_packs.py</code> — the second quantity engine.</li>
-  <li><code>backend/app/services/databricks_sync.py</code> (orchestrators at the bottom first) — where data comes from and how a sync fails.</li>
-  <li><code>backend/app/routers/dashboard.py</code> (<code>/stock-cover</code>, <code>/fba-replenishment</code>) + <code>services/cache.py</code> — the endpoint pattern and caching.</li>
-  <li><code>backend/app/middleware/auth.py</code> + <code>frontend/src/api/client.ts</code> — auth and market plumbing on both sides.</li>
-  <li><code>frontend/src/App.tsx</code>, <code>components/Layout.tsx</code> — routes, guards, nav, CHANGELOG.</li>
-  <li><code>frontend/src/pages/ReplenishmentOrder.tsx</code> (skim) — the page planners live in; frontend patterns at scale.</li>
-  <li><code>backend/app/tools/compare_projections.py</code> — the regression gate you must run.</li>
+  <li><code>CLAUDE.md</code> (root, 5 KB): the routing table and the rules that bite everywhere.</li>
+  <li><code>forecast-calculations.md</code> "The shared model" + "Markets and warehouses" (<code>:8-78</code>).</li>
+  <li><code>backend/app/services/market_config.py</code>: every location, route and mapping as code.</li>
+  <li><code>backend/app/services/projection.py</code>: the primitive and its readings; the most stable file.</li>
+  <li><code>backend/app/services/warehouse_velocity.py:310-449</code>: one complete consumer.</li>
+  <li><code>demand.py</code> constants, <code>DemandSeries</code>, <code>location_demand</code>; then <code>forecast-calculations.md</code> "Demand" and "Seasonal forecast".</li>
+  <li><code>inbound_grading.py</code> + "Inbound grading" (<code>:281-343</code>).</li>
+  <li><code>routers/dashboard.py</code> <code>stock_cover</code>, <code>services/cache.py</code>, <code>cache_warmup.py</code>, <code>backend/CLAUDE.md</code> "Response cache".</li>
+  <li><code>databricks_sync.py</code> orchestrators (<code>:2100-2218</code>), then <code>sync_daily_sales</code>, then <code>routers/sync.py</code>.</li>
+  <li><code>middleware/auth.py</code>, <code>frontend/src/api/client.ts</code>, <code>stores/marketStore.ts</code>.</li>
+  <li><code>App.tsx</code>, <code>Layout.tsx</code>, <code>pages/Dashboard.tsx</code>.</li>
+  <li><code>fba_replenishment.py</code> + <code>replenishment_orders.py</code> + <code>routers/CLAUDE.md</code> order rules.</li>
+  <li><code>sku_range.py</code> + <code>models/CLAUDE.md</code> <code>SkuRange</code>.</li>
+  <li><code>transfers.py</code>, <code>factory_buy.py</code> (+ <code>retail_calendar.py</code>), the three <code>*_rules.py</code>.</li>
+  <li>The <code>projection-harness</code>, <code>release</code> and <code>prod-ops</code> skills, <code>compare_projections.py</code>, <code>bitbucket-pipelines.yml</code>, <code>scripts/deploy.sh</code>.</li>
+  <li><code>CHANGELOG.md</code> (skim), then <code>backend/app/mcp/</code> + <code>MCP-PLAN.md</code>.</li>
 </ol>
 
 <div class="nav">
   <a href="glossary.html">← Glossary</a>
-  <a href="../lessons/0001-the-map-four-layers-one-primitive.html">Lesson 1 →</a>
+  <a href="../lessons/0001-the-map-five-boxes-one-primitive.html">Lesson 1 →</a>
 </div>
 
 </div>

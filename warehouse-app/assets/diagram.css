@@ -1,0 +1,96 @@
+/* =====================================================================
+   Shared component: box-and-arrow system diagrams (HTML/CSS, prints cleanly).
+   Built on the course.css tokens; link AFTER course.css:
+     <link rel="stylesheet" href="../assets/diagram.css">
+
+   1) STACK: boxes top-to-bottom with labelled arrows between them.
+      <div class="sys">
+        <div class="bx src"><div class="bt">Databricks dwh</div><div class="bd">…</div></div>
+        <div class="arr">twice a day</div>
+        <div class="bx"><div class="bt"><span class="bn">1</span>Sync</div>
+          <div class="bd">…</div>
+          <div class="chips"><span class="chip">daily_sales</span><span class="chip own">sku_range</span></div>
+        </div>
+      </div>
+      .bx variants: .src (outside the app) · .hot (where most changes land)
+      .arr variants: .up (arrow points up) · .both (two-way)
+      .chip variants: .own (app-owned record) · .off (dashed: optional / switched off)
+                      .warn (needs attention)
+
+   2) FRAME: a dashed boundary around boxes (a host, a container, "Infra").
+      <div class="frame"><span class="flbl">EC2 host</span> …boxes… </div>
+      Put boxes side by side inside <div class="row">…</div>.
+
+   3) PIPE: a left-to-right recipe that wraps on narrow screens.
+      <div class="pipe"><span class="st">opening stock</span><span class="to"></span>
+        <span class="st key">project()</span></div>
+      .st variants: .key (the centre of the recipe) · .soft (policy / optional)
+
+   4) CYCLE: a numbered loop that returns to its start.
+      <ol class="cycle"><li>…</li><li>…</li></ol>   (last item gets a ↺ marker)
+   ===================================================================== */
+
+.sys{margin:1.4rem 0; font-family:var(--sans);}
+.bx{border:1px solid var(--rule); border-radius:10px; background:#fff; padding:.65rem .9rem;}
+.bx.src{background:var(--code-bg);}
+.bx.hot{border:2px solid var(--accent);}
+.bx .bt{font-size:.74rem; text-transform:uppercase; letter-spacing:.1em; font-weight:700;
+  color:var(--accent); display:flex; align-items:center; gap:.45rem;}
+.bx.src .bt{color:var(--ink);}
+.bx .bn{font-size:.66rem; color:#fff; background:var(--accent); width:1.25rem; height:1.25rem;
+  border-radius:50%; display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
+  letter-spacing:0;}
+.bx .bd{font-size:.82rem; color:#333; line-height:1.42; margin-top:.25rem;}
+.bx .bd code{font-size:.78rem;}
+.chips{display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.45rem;}
+.chip{font-family:var(--mono); font-size:.68rem; padding:.12rem .5rem; border-radius:999px;
+  border:1px solid var(--rule); background:var(--code-bg); color:#333; white-space:nowrap;}
+.chip.own{background:var(--accent-soft); border-color:var(--accent); color:var(--accent);}
+.chip.off{background:transparent; border-style:dashed; color:var(--muted);}
+.chip.warn{background:var(--bad-bg); border-color:var(--bad); color:var(--bad);}
+.chip.lbl{font-family:var(--sans); font-weight:700; background:transparent; border-color:transparent;
+  padding-left:0; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; font-size:.6rem;}
+
+.arr{text-align:center; color:var(--muted); font-size:.72rem; padding:.3rem 0; line-height:1.3;}
+.arr::before{content:"\25BC"; display:block; color:var(--accent); font-size:.7rem;}
+.arr.up::before{content:"\25B2";}
+.arr.both::before{content:"\25B2\00a0\25BC";}
+
+.row{display:flex; gap:.6rem; flex-wrap:wrap; align-items:stretch;}
+.row > .bx, .row > .frame{flex:1 1 200px; min-width:0;}
+.row > .bx.narrow{flex:0 1 170px;}
+
+.frame{border:2px dashed #cfc8bb; border-radius:14px; padding:1.3rem .8rem .8rem;
+  position:relative; margin:.9rem 0 .4rem;}
+.frame > .flbl{position:absolute; top:-.7rem; left:.9rem; background:var(--bg);
+  padding:0 .45rem; font-size:.66rem; text-transform:uppercase; letter-spacing:.12em;
+  font-weight:700; color:var(--muted);}
+.frame .frame > .flbl{background:#fff;}
+.frame.solid{border-style:solid; border-color:var(--rule); background:#fbfaf6;}
+.frame.solid > .flbl{background:#fbfaf6;}
+.frame > .bx + .bx, .frame > .row + .row, .frame > .bx + .row, .frame > .row + .bx{margin-top:.55rem;}
+
+.pipe{display:flex; flex-wrap:wrap; align-items:center; gap:.35rem .3rem; margin:1.1rem 0;
+  font-family:var(--sans);}
+.pipe .st{border:1px solid var(--rule); border-radius:8px; background:#fff; padding:.4rem .65rem;
+  font-size:.8rem; line-height:1.3;}
+.pipe .st small{display:block; color:var(--muted); font-size:.68rem;}
+.pipe .st.key{border:2px solid var(--accent); background:var(--accent-soft); font-weight:700;}
+.pipe .st.soft{border-style:dashed; color:#444;}
+.pipe .to::before{content:"\2192"; color:var(--accent); font-weight:700;}
+.pipe .plus::before{content:"+"; color:var(--muted); font-weight:700;}
+
+ol.cycle{counter-reset:cy; list-style:none; padding:0; margin:1.1rem 0; font-family:var(--sans);
+  font-size:.84rem;}
+ol.cycle li{counter-increment:cy; position:relative; padding:.45rem .7rem .45rem 2.4rem;
+  margin:0; border-left:2px solid var(--accent);}
+ol.cycle li::before{content:counter(cy); position:absolute; left:-.72rem; top:.42rem;
+  width:1.3rem; height:1.3rem; border-radius:50%; background:var(--accent); color:#fff;
+  font-size:.66rem; font-weight:700; display:flex; align-items:center; justify-content:center;}
+ol.cycle li:last-child::after{content:"\21BA  back to 1"; display:block; color:var(--accent);
+  font-size:.7rem; font-weight:700; margin-top:.3rem;}
+
+@media print{
+  .bx,.frame,.pipe .st{break-inside:avoid;}
+  .chip.own{border-width:2px;}
+}

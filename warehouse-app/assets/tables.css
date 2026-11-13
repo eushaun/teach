@@ -13,6 +13,7 @@
      </table>
    Badges: .b-read (read every line) · .b-glance (skim) · .b-noise (ignore)
    Indent nested paths with <td class="file in1"> / .in2
+   Long cells (lists of names): <td class="file wrap"> lets them wrap
    ===================================================================== */
 
 table.ref{width:100%; border-collapse:collapse; font-family:var(--sans);
@@ -23,6 +24,7 @@ table.ref th{text-align:left; font-size:.68rem; text-transform:uppercase;
 table.ref td{border-bottom:1px solid var(--rule); padding:.5rem .6rem .5rem 0;
   vertical-align:top;}
 table.ref td.file{font-family:var(--mono); font-size:.78rem; white-space:nowrap;}
+table.ref td.file.wrap{white-space:normal; overflow-wrap:break-word;}
 table.ref td.file.in1{padding-left:1.1rem;}
 table.ref td.file.in2{padding-left:2.2rem;}
 table.ref tr.grp td{font-family:var(--sans); font-weight:700; font-size:.72rem;

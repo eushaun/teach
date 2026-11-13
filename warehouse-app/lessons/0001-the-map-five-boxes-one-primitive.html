@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson 1 — The Map: Five Boxes, One Primitive</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+<link rel="stylesheet" href="../assets/tables.css">
+<link rel="stylesheet" href="../assets/diagram.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">Lesson 1 · DreamCast (warehouse-forecast-app)</p>
+  <h1>The Map: Five Boxes, One Primitive</h1>
+  <p class="sub">How DreamCast is built, where it runs, how data moves through it, and how a
+  change reaches production. Draw it once here; every later lesson zooms into one box.</p>
+</header>
+
+<div class="callout">
+  <span class="lbl">Why this lesson (your mission)</span>
+  <p>As the likely maintainer, every question you get ("the sync failed", "this cover looks
+  wrong", "a reader can't open Transfers", "the deploy broke it") lands in one box of this
+  system. Knowing which box is your first move every time. Every path and line below was
+  checked against <code>origin/main</code> @ <code>380ff8f</code> (v2.26, 13 Nov 2026), the
+  commit production runs. This lesson replaces the October lesson 1, which was written
+  before 57 commits changed most of the picture; assume none of it.</p>
+</div>
+
+<p>Your win for today: <strong>draw DreamCast from memory (five boxes, Infra around them,
+one primitive in the middle) and, given a symptom, name the box and the first file to
+open.</strong></p>
+
+<p class="sans" style="color:var(--muted); font-size:.88rem;">About 30 minutes. Sections 1–2
+are the picture; 3–9 walk each box; 10–11 are how it changes and where bugs live; 12 is
+practice. Terms in dotted underline are in the <a href="../reference/glossary.html">Glossary</a>;
+the compressed version of all of this is the <a href="../reference/architecture-map.html">Architecture Map</a>.</p>
+
+<!-- ================================================================ -->
+<h2><span class="n">1</span> The picture: five boxes</h2>
+
+<p>DreamCast (the app's name since v2.3, 13 Oct 2026; the repo, database and image keep the
+old <code>warehouse-forecast</code> name<sup><a href="#r1">1</a></sup>) pulls data from your
+<code>dwh</code> catalog, keeps it in Postgres next to records it owns itself, computes every
+number on request from one primitive, and serves it to planners through a React app.</p>
+
+<div class="sys">
+  <div class="bx src"><div class="bt">Databricks <code>dwh</code> (your side)</div>
+    <div class="bd"><code>dwh.netsuite.*</code> · <code>dwh.netsuite2.*</code> · <code>dwh.merch.*</code> ·
+    <code>dwh.amazon_seller_central.*</code> · <code>dwh.shipping.*</code></div></div>
+  <div class="arr">read twice a day, 08:00 and 20:00 UTC (or Settings › Sync Now)</div>
+  <div class="bx"><div class="bt"><span class="bn">1</span>Sync</div>
+    <div class="bd"><code>services/databricks_sync.py</code>, fired by a scheduler <em>inside the
+    web process</em>. 16 data steps, then clear and re-warm the response cache.</div></div>
+  <div class="arr">upsert or full replace</div>
+  <div class="bx"><div class="bt"><span class="bn">2</span>Store</div>
+    <div class="bd">Postgres 16, 38 tables. Not just a mirror any more.</div>
+    <div class="chips"><span class="chip lbl">mirrors</span><span class="chip">daily_sales</span><span class="chip">inventory_levels</span><span class="chip">inbound_shipment_po</span>
+      <span class="chip lbl">rollups</span><span class="chip">monthly_velocity</span>
+      <span class="chip lbl">the record</span><span class="chip own">sku_range</span><span class="chip own">replenishment_order</span><span class="chip own">demand_adjustments</span></div></div>
+  <div class="arr up">planned: Databricks reads <code>sku_range</code> back from here</div>
+  <div class="arr">SQLAlchemy, mostly raw SQL via <code>text()</code></div>
+  <div class="bx hot"><div class="bt"><span class="bn">3</span>Engine</div>
+    <div class="bd"><code>backend/app/services/</code>. One primitive, three inputs, then
+    readings, then policy, then review rules.</div>
+    <div class="chips"><span class="chip">opening stock</span><span class="chip">DemandSeries</span><span class="chip">graded arrivals</span><span class="chip own">projection.project()</span><span class="chip">readings</span><span class="chip">policy</span><span class="chip">review rules</span></div></div>
+  <div class="arr">Pydantic schemas · in-process response cache</div>
+  <div class="bx"><div class="bt"><span class="bn">4</span>API (two front doors)</div>
+    <div class="chips"><span class="chip">REST /api/auth · /api/dashboard · /api/admin · /api/sync</span><span class="chip off">MCP /mcp (only when MCP_ENABLED)</span></div></div>
+  <div class="arr">JSON over HTTPS, Entra ID token as Bearer</div>
+  <div class="bx"><div class="bt"><span class="bn">5</span>UI</div>
+    <div class="bd">React 19 SPA (<code>frontend/src/</code>), served by the same FastAPI process
+    in production. 18 routed pages in four menu groups.</div></div>
+  <div class="frame"><span class="flbl">Infra, around all five</span>
+    <div class="bd sans" style="font-size:.82rem;">push to <code>main</code> → Bitbucket Pipelines →
+    one Docker image → ECR → SSM → <code>docker compose up -d</code> on a shared EC2 box behind
+    Caddy. Container start = migrate → seed → serve.</div></div>
+</div>
+
+<p>Two things about this picture are new since October, and both change how you debug:</p>
+<ul>
+  <li><strong>Store is "mirror + record".</strong> DreamCast is now the source of truth for
+  ranging, both SKU statuses, seller SKUs and the Amazon case pack (<code>sku_range</code>),
+  the weekly replenishment orders and their audit trail, planned demand adjustments, the promo
+  calendar and compliance cases. Data flows both ways: you are due to read
+  <code>sku_range</code> into Databricks.<sup><a href="#r2">2</a></sup></li>
+  <li><strong>There is a second front door.</strong> An MCP server lives in the same process
+  at <code>/mcp</code>, using the same services as the REST API.</li>
+</ul>
+<p>What has <em>not</em> changed is the middle: <code>projection.py</code> is byte-for-byte
+the file it was on 1 October. Every feature since was added by changing its inputs.</p>
+
+<!-- ================================================================ -->
+<h2><span class="n">2</span> Where it runs</h2>
+
+<p>Production is one container doing nearly everything, next to a Postgres container, on an
+EC2 host it shares with two other internal apps. The diagram is the runtime picture; the
+boxes from section 1 sit inside the <code>warehouse-app</code> container.<sup><a href="#r3">3</a></sup></p>
+
+<div class="sys">
+  <div class="row">
+    <div class="bx src narrow"><div class="bt">Planner's browser</div>
+      <div class="bd">React SPA · MSAL sign-in</div></div>
+    <div class="bx src narrow"><div class="bt">Entra ID</div>
+      <div class="bd">issues the token; backend checks it against Entra's keys</div></div>
+  </div>
+  <div class="arr">HTTPS</div>
+  <div class="frame"><span class="flbl">Shared EC2 host · docker network shared by three compose projects</span>
+    <div class="bx"><div class="bt">caddy</div>
+      <div class="bd">TLS (Let's Encrypt) and routing by hostname for all three apps. Lives in
+      DreamCast's compose project.</div></div>
+    <div class="row">
+      <div class="frame solid"><span class="flbl">warehouse-app container · uvicorn, ONE worker</span>
+        <div class="chips">
+          <span class="chip">/api/* routers</span><span class="chip">SPA files (/assets + catch-all)</span>
+          <span class="chip">APScheduler (08:00, 20:00 UTC)</span><span class="chip">sync thread</span>
+          <span class="chip">response cache (dict, no TTL)</span><span class="chip off">/mcp</span>
+        </div></div>
+      <div class="frame solid"><span class="flbl">postgres container</span>
+        <div class="chips"><span class="chip">postgres:16-alpine</span><span class="chip">volume pgdata</span><span class="chip">bound to the host only</span></div></div>
+    </div>
+    <div class="bx src"><div class="bt">two other internal apps + their Postgres</div>
+      <div class="bd">share the CPU, memory and Caddy.</div></div>
+  </div>
+  <div class="arr">databricks-sql-connector · personal access token</div>
+  <div class="bx src"><div class="bt">Databricks: a dedicated all-purpose cluster</div>
+    <div class="bd">Not a SQL warehouse. It auto-terminates, so a cold start takes minutes;
+    sync step 0 probes it and waits if the probe was slow.</div></div>
+</div>
+
+<div class="keybox">
+  <p><strong>One process does everything.</strong> Web API, SPA files, the scheduler, the sync
+  thread, the cache and (when enabled) MCP. That is why the image pins
+  <code>--workers 1</code> (<code>Dockerfile:36</code>): a second worker would fire the cron
+  twice and split the cache in two.</p>
+  <p><strong>The start command is the migration and seed runner.</strong>
+  <code>alembic upgrade head &amp;&amp; python -m app.seed &amp;&amp; uvicorn …</code>. A broken
+  migration or seed means the app never starts, and the pipeline is already green by then.</p>
+  <p><strong>Postgres is a container, not RDS.</strong> The data lives in a Docker volume on
+  the host. A shell on the host is reached through AWS SSM, not SSH.</p>
+</div>
+
+<h3>Three places it runs</h3>
+<table class="ref">
+  <thead><tr><th></th><th>Production</th><th>Dev (laptop / WSL)</th><th>Branch test stack</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Defined by</strong></td><td>the compose file <em>on the host</em> (the repo's
+      <code>docker-compose.prod.yml</code> and <code>Caddyfile</code> are stale copies)</td>
+      <td><code>docker-compose.yml</code>, compose project <code>dreamcast</code></td>
+      <td>the <code>test-branch-stack</code> repo skill</td></tr>
+    <tr><td><strong>Backend</strong></td><td>image from ECR, 1 worker</td>
+      <td><code>backend</code> service, <code>uvicorn --reload</code>, <code>backend/app</code> bind-mounted</td>
+      <td><code>docker run</code> of the dev image with the worktree's <code>backend/app</code> mounted read-only</td></tr>
+    <tr><td><strong>Frontend</strong></td><td>built into the image, served by FastAPI</td>
+      <td>Vite dev server on 5173, proxies <code>/api/*</code> to the backend</td>
+      <td>optional, on 5174</td></tr>
+    <tr><td><strong>Database</strong></td><td>prod Postgres container</td>
+      <td>local Postgres container</td><td>a <em>copy</em> of the local DB (<code>branch_test</code>),
+      so parallel sessions don't trample each other</td></tr>
+    <tr><td><strong>Sign-in</strong></td><td>Entra ID</td><td>Entra ID if configured, else a dev token</td>
+      <td>Entra blanked, so a dev token</td></tr>
+    <tr><td><strong>Gotcha</strong></td><td>a data fix made in SQL doesn't reach the cache:
+      restart the container</td><td>the same scheduler runs, so your laptop syncs itself at
+      08:00 and 20:00 UTC; saving a backend file mid-sync kills that sync</td>
+      <td>run <code>python -m app.seed</code> against the copy before testing a new market</td></tr>
+  </tbody>
+</table>
+
+<!-- ================================================================ -->
+<h2><span class="n">3</span> Box 1 · Sync: how data arrives</h2>
+
+<p>The trigger is not a Databricks job or a host cron. It is an
+<a class="xref" href="../reference/glossary.html#apscheduler">APScheduler</a> job registered in
+FastAPI's startup hook (<code>backend/app/main.py:40-41</code>):<sup><a href="#r4">4</a></sup></p>
+<pre><code>scheduler = BackgroundScheduler(timezone="UTC")
+scheduler.add_job(run_incremental_sync, "cron", hour="8,20", minute=0,
+                  timezone="UTC", id="twice_daily_sync")</code></pre>
+<p>08:00 and 20:00 UTC is two hours after the Databricks NetSuite load, so each run reads
+fresh data (it was once a day at 12:00 UTC until 5 Nov 2026). Settings › Sync Now
+(<code>POST /api/sync/trigger</code>) runs the same function in a daemon thread.</p>
+
+<p>The orchestrator, <code>run_incremental_sync</code>
+(<code>databricks_sync.py:2150-2218</code>), is a flat list of function calls. Grouped by
+what they feed:<sup><a href="#r5">5</a></sup></p>
+<table class="ref">
+  <thead><tr><th>#</th><th>Steps (<code>sync_log.table_name</code>)</th><th>Feeds</th><th>On error</th></tr></thead>
+  <tbody>
+    <tr><td>0</td><td class="file wrap">cluster_warmup</td><td>wakes your cluster (<code>SELECT 1</code>; waits 8 min if slow)</td><td>abort</td></tr>
+    <tr><td>1–2</td><td class="file wrap">daily_sales · daily_soh</td><td>demand history; then rebuild the two velocity rollups. Upsert from the latest date minus 7 / 45 days</td><td>abort</td></tr>
+    <tr><td>3–5</td><td class="file wrap">open_purchase_orders · transfer_orders · inventory_levels</td><td>arrivals and opening stock. Full replace</td><td>abort</td></tr>
+    <tr><td>6–8</td><td class="file wrap">product_names · carton_quantities · sku_statuses</td><td>SKU attributes; <code>sku_statuses</code> also seeds <code>sku_range</code> where it is still empty</td><td><strong>log and continue</strong></td></tr>
+    <tr><td>9–13</td><td class="file wrap">amazon_sku_mapping · amazon_fba_inventory · amazon_awd_inventory · amazon_listing_issues · amazon_compliance_register</td><td>Amazon stock, listings, compliance holds</td><td>abort</td></tr>
+    <tr><td>14–16</td><td class="file wrap">inbound_shipments · amazon_fba_shipments · amazon_fba_lead_times</td><td>the shipping master and AGL bookings; Amazon shipment lots; lead times</td><td>abort</td></tr>
+    <tr><td>—</td><td class="file wrap">invalidate_cache()</td><td>clears every cached response</td><td></td></tr>
+    <tr><td>17</td><td class="file wrap">cache_warmup</td><td>recomputes every cached page for every market</td><td>swallowed</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <span class="lbl">The failure mode to remember</span>
+  <p>An "abort" step logs its error to <code>sync_log</code> and re-raises. The orchestrator
+  stops there, <em>before</em> <code>invalidate_cache()</code>. So after a mid-run failure,
+  cached pages keep showing the previous run's numbers, while any page that gets recomputed
+  (new parameters, an admin save) mixes refreshed and stale tables. Also: the sidebar's "Last
+  sync 3h ago" reads the most recent completed <em>step</em> of any run, so a run that died
+  at step 9 still looks fresh. Check Settings' step list, not the sidebar.</p>
+</div>
+
+<p>Every source table is a cross-repo contract. All but one are yours in
+<code>ltd-dbx-asset-bundle</code>; the shipping master
+(<code>dwh.shipping.master_ns_jas_inbound_shipment_pos</code>) is owned by the shipping side.
+Rename or retype a column there and that step fails, and for an abort step, so does the rest
+of the run. Lesson 6 takes the sync apart.</p>
+
+<!-- ================================================================ -->
+<h2><span class="n">4</span> Box 2 · Store: mirror, rollups and the record</h2>
+
+<p>38 tables across 36 SQLAlchemy model files in <code>backend/app/models/</code>, created by
+Alembic migrations in <code>backend/alembic/versions/</code> (head <code>056_demand_adjustments</code>),
+which run on every container start.<sup><a href="#r6">6</a></sup> Group them by who writes
+them, because that tells you who to blame when a value is wrong:</p>
+<table class="ref">
+  <thead><tr><th>Group</th><th>Examples</th><th>Written by</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Mirrors</strong></td><td class="file wrap">daily_sales, daily_soh, inventory_levels, open_purchase_orders, transfer_orders, inbound_shipment_po, agl_booking, amazon_*</td><td>the sync only</td></tr>
+    <tr><td><strong>Rollups</strong></td><td class="file wrap">monthly_velocity, monthly_warehouse_velocity</td><td>the sync, after steps 1 and 2</td></tr>
+    <tr><td><strong>The record</strong> (app is the source of truth)</td><td class="file wrap">sku_range, replenishment_order(+_item, +_event), demand_adjustments, fba_promo_calendar, compliance_cases, stock_reservations, amazon_launch</td><td>planners and admins, in the UI (orders also via MCP)</td></tr>
+    <tr><td><strong>Config</strong></td><td class="file wrap">fba_replenishment_config (one row per market), sku_status_config, alert_thresholds</td><td>seed + admins</td></tr>
+    <tr><td><strong>System</strong></td><td class="file wrap">users, sync_log</td><td>auth, sync</td></tr>
+    <tr><td><strong>Dead, kept for history</strong></td><td class="file wrap">amazon_range, amazon_fba_inbound, agl_shipments</td><td>nothing; don't build on them</td></tr>
+  </tbody>
+</table>
+<div class="keybox">
+  <p><strong>The file seeds, a decision wins.</strong> Merch's SKU status file still arrives
+  through the sync (into the mirror <code>sku_market_status</code>), but it only fills
+  <code>sku_range</code> where nobody has decided yet (<code>sku_range.seed_from_file</code>
+  fills NULL calls only). Once a planner sets a range call or a status in DreamCast, no sync
+  overwrites it.</p>
+</div>
+
+<!-- ================================================================ -->
+<h2><span class="n">5</span> Box 3 · Engine: one primitive, three inputs</h2>
+
+<p>Until September 2026 the app had six separate projection loops with six ideas of demand,
+and their numbers sat side by side "as though they agreed. They did not." Matt replaced them
+with one module. Its docstring opens: "Every cover figure, order quantity and urgency band in
+the app is a reading of the same thing."<sup><a href="#r7">7</a></sup></p>
+
+<div class="pipe">
+  <span class="st">opening stock<small>stock_cover.get_physical_soh</small></span><span class="plus"></span>
+  <span class="st"><a class="xref" href="../reference/glossary.html#demandseries">DemandSeries</a><small>demand.location_demand</small></span><span class="plus"></span>
+  <span class="st"><a class="xref" href="../reference/glossary.html#arrivals">graded arrivals</a><small>inbound_grading</small></span><span class="to"></span>
+  <span class="st key">projection.project()</span><span class="to"></span>
+  <span class="st"><a class="xref" href="../reference/glossary.html#reading">a reading</a><small>weeks_of_cover · deficit_against · min_point · gap_before</small></span><span class="to"></span>
+  <span class="st soft">policy<small>caps · case packs · range gates · holds · launches</small></span><span class="to"></span>
+  <span class="st soft">review rules<small>flag lines, never move a quantity</small></span>
+</div>
+
+<p>The whole loop, <code>backend/app/services/projection.py:279-289</code>:<sup><a href="#r7">7</a></sup></p>
+<pre><code>    points: list[ProjectionPoint] = []
+    running = float(opening_soh)
+    for i, p in enumerate(periods):
+        items = by_period.get(i, [])
+        arrived = sum(a.quantity for a in items)
+        demand = p.demand
+        closing = running + arrived - demand          <span class="cmt">← nothing is floored</span>
+        points.append(ProjectionPoint(p, running, arrived, demand, closing, items))
+        running = closing
+
+    return Projection(float(opening_soh), points, dropped)</code></pre>
+
+<p>A running balance, nothing more. The engines differ in what they feed it and which question
+they ask of the result:</p>
+<ul>
+  <li><strong>Cover pages</strong> (Dashboard, All SKUs, Alerts, Out of Stock, Velocity) ask
+  <code>weeks_of_cover(cap=52)</code>.</li>
+  <li><strong>Quantity engines</strong> ask <code>deficit_against(floor, from_period=…)</code>:
+  Replenishment (<code>fba_replenishment.py</code>), Transfers (<code>transfers.py</code>) and
+  Factory Buy (<code>factory_buy.py</code>, now stepped over LTD retail weeks).</li>
+  <li><strong>Policy</strong> sits on the reading, never inside the loop: cap at what the source
+  can spare, round to cases (<code>case_packs.resolve</code>), drop SKUs not ranged for the
+  route (<code>sku_range</code>), zero a compliance hold, swap in a launch quantity.</li>
+  <li><strong>Review rules</strong> (<code>replenishment_rules.py</code>,
+  <code>transfer_rules.py</code>, <code>factory_buy_rules.py</code>) flag a line "to look at
+  more closely" with a reason. By design they never change a quantity.</li>
+</ul>
+<p>The design rule, "policy goes in the inputs, never in a forked loop", is why the primitive
+survived two months of features untouched. When a number changes, look at the inputs first:
+that's where every rule since October went (the demand series alone grew from about 800 to
+1,234 lines).</p>
+
+<!-- ================================================================ -->
+<h2><span class="n">6</span> Trace one number through all five boxes</h2>
+
+<p>A Dashboard row (US market) shows a bar and a figure under <strong>Riverside</strong>, say
+<code>6.5 wk</code> (synthetic). Top to bottom:<sup><a href="#r8">8</a></sup></p>
+<ol>
+  <li><span class="b b-glance">UI</span> <code>frontend/src/pages/Dashboard.tsx:80-98</code>: a
+  <code>useEffect</code> that re-runs when <code>market</code> changes calls
+  <code>fetchStockCover()</code>. The cell renders
+  <code>row.warehouse_totals[wh].weeks_of_cover</code> (<code>:368</code>); the bar's width is
+  <code>woc / 26</code> (<code>:371</code>), full at 26 weeks though the figure caps at 52.</li>
+  <li><span class="b b-glance">UI</span> <code>api/dashboard.ts:33-36</code> issues
+  <code>GET /dashboard/stock-cover</code>; the axios interceptor in <code>api/client.ts:32-39</code>
+  appends <code>?market=US</code> from the market store, and the next one (<code>:41-64</code>)
+  attaches the Entra ID token as <code>Bearer</code>.</li>
+  <li><span class="b b-read">API</span> <code>routers/dashboard.py:105</code>
+  <code>stock_cover</code>. Its <code>market</code> comes from
+  <code>Depends(get_market_param)</code>, which first runs <code>get_current_user</code>
+  (validate the token, apply the reader scope). It builds a cache key prefixed with
+  <a class="xref" href="../reference/glossary.html#calc-basis-version"><code>CALC_BASIS_VERSION</code></a>
+  (<code>:116</code>) and returns the cached payload if one exists, which after a sync is the
+  normal case because the warm-up step filled it.</li>
+  <li><span class="b b-read">Engine</span> Opening stock:
+  <code>stock_cover.get_physical_soh</code> reads
+  <a class="xref" href="../reference/glossary.html#fts">free to sell</a>
+  (<code>inventory_levels.quantityavailable</code>) per warehouse and SKU.</li>
+  <li><span class="b b-read">Engine</span> <code>warehouse_velocity.get_batch_seasonal_woc</code>
+  (<code>:310</code>) builds demand (<code>:374</code>) and arrivals (<code>:376</code>), then
+  <code>_cover_for</code> (<code>:416-449</code>) runs
+  <code>project(soh, series.weekly_periods(today, 52), arrivals, early_arrivals="credit")</code>
+  and reads <code>weeks_of_cover(cap=52)</code>.</li>
+  <li><span class="b b-read">Engine</span> Demand: <code>demand.location_demand</code>
+  (<code>:1140</code>) asks <code>demand_channels_for_location</code> (<code>:1059</code>).
+  Riverside (124) is the US <a class="xref" href="../reference/glossary.html#hub">hub</a>, so the
+  answer is <code>ALL_CHANNELS</code>: every US sale, with one-off orders split off and planned
+  adjustments attached, read from <code>daily_sales</code>.</li>
+  <li><span class="b b-read">Engine</span> Arrivals:
+  <code>inbound_grading.graded_incoming_by_location</code> (<code>:528</code>) grades lots from
+  the <strong>shipping master</strong> first (<code>inbound_shipment_po</code>), then open POs
+  the master doesn't describe, Amazon shipment lots, and open transfer orders.</li>
+  <li><span class="b b-glance">Store</span> <code>daily_sales</code>, unique on (date, country,
+  channel, sku, revenue_type); <code>inventory_levels</code>; <code>inbound_shipment_po</code>.</li>
+  <li><span class="b b-glance">Sync</span> <code>sync_daily_sales</code>
+  (<code>databricks_sync.py:157</code>) upserts from
+  <code>dwh.netsuite.gold_netsuite_daily_sales_by_customer</code>, re-pulling the last 7 days,
+  relabelling each market's Amazon FBM customer as channel <code>FBM</code>.</li>
+  <li><span class="b b-noise">Source</span> your gold table. Its grain and column names are
+  now part of DreamCast's contract.</li>
+</ol>
+
+<div class="callout">
+  <span class="lbl">What the trace tells a maintainer</span>
+  <p>A "wrong" cover has exactly three suspects: <em>opening stock</em>
+  (<code>inventory_levels</code>), <em>the demand series</em> (its hover label says which
+  basis it used), or <em>the graded arrivals</em>. And a fourth that isn't a calculation at
+  all: <em>the cache</em> served something computed before the data or the rules changed.</p>
+</div>
+
+<!-- ================================================================ -->
+<h2><span class="n">7</span> Trace one write, and the loop it closes</h2>
+
+<p>Reads are half the system. The other half is planners acting on the numbers, and the
+result coming back through the sync. The weekly Amazon order shows it best:<sup><a href="#r9">9</a></sup></p>
+<ol class="cycle">
+  <li><strong>UI.</strong> On Replenishment (<code>/fba</code>, <code>ReplenishmentOrder.tsx</code>,
+  the biggest page) a planner steps a Ship Qty by one case. The page calls
+  <code>PUT /api/dashboard/replenishment-orders/{id}/items/{sku}</code>.</li>
+  <li><strong>API.</strong> <code>routers/dashboard.py:1307</code> checks the user, the market,
+  and that they are an editor.</li>
+  <li><strong>Engine.</strong> <code>replenishment_orders.adjust_item</code> checks the order's
+  stage, sets the quantity, clears any approval tick, re-runs the auto-approval rules on that
+  line, and writes an audit event to <code>replenishment_order_event</code>.</li>
+  <li><strong>Store.</strong> The order is part of the record. No cached page reads orders, so
+  nothing is invalidated.</li>
+  <li><strong>Outside DreamCast.</strong> An approver approves; the planner exports one file
+  per transfer order plus a Send to Amazon manifest, and raises the TOs in NetSuite.</li>
+  <li><strong>Sync.</strong> The next run's <code>transfer_orders</code> step brings those TOs
+  back from your <code>dwh</code>; grading dates them ship date + 3 weeks (Riverside → Amazon),
+  and next week's recommendation nets them off.</li>
+</ol>
+<p>That loop is the system. A recommendation that "keeps asking for the same stock" usually
+means the loop broke somewhere: the TO wasn't raised, the sync failed, or grading didn't count
+it.</p>
+
+<!-- ================================================================ -->
+<h2><span class="n">8</span> Box 4 · API: two front doors</h2>
+
+<p><strong>REST.</strong> <code>main.py:91-94</code> mounts four routers under
+<code>/api/</code>, FastAPI's standard <code>APIRouter</code> layout:<sup><a href="#r10">10</a></sup></p>
+<table class="ref">
+  <thead><tr><th>Router</th><th>What it serves</th></tr></thead>
+  <tbody>
+    <tr><td class="file wrap">auth</td><td><code>GET /me</code>, and a dev-only login for local work.</td></tr>
+    <tr><td class="file wrap">dashboard</td><td>Every page read (cached ones: stock-cover, alerts, summary, transfers, overstock, fba-replenishment, factory-buy, inbound, product-performance, amazon-stock-gap, range-exceptions) and the replenishment-order read/write API.</td></tr>
+    <tr><td class="file wrap">admin</td><td>Users, SKU master, statuses, FBA config and promos, range, launches, reservations, compliance cases, demand adjustments.</td></tr>
+    <tr><td class="file wrap">sync</td><td>Trigger, progress, status, last sync, data overview.</td></tr>
+  </tbody>
+</table>
+<p>A handler is thin: resolve the user and market, check the cache, call a service, wrap the
+result in a Pydantic schema from <code>schemas/</code>, cache it. Two things bite here. A
+field a service returns but the schema doesn't declare is silently dropped. And the cache is a
+dict in the process's memory with no TTL: it is cleared at the end of a successful sync, by an
+admin change that affects it, or by a restart, and by nothing else. Every key is prefixed with
+<code>CALC_BASIS_VERSION</code> (<code>services/cache.py:20</code>); the release rule is to bump
+it in the same commit as any projection, velocity or grading change, so entries computed under
+the old rule can never be served again.</p>
+
+<p><strong>MCP.</strong> <code>backend/app/mcp/</code> is a FastMCP server mounted in-process at
+exactly <code>/mcp</code>, and only when the <code>MCP_ENABLED</code> setting is true
+(<code>main.py:106-114</code>).<sup><a href="#r11">11</a></sup> It is a second front door onto
+the same services: six read tools (markets, orders, one order, a SKU's replenishment preview,
+stock cover, transfer recommendations) and two write tools (adjust and approve order lines).
+Writes are <em>preview then confirm</em>: call with <code>confirm=false</code> to get a preview
+and a <code>change_token</code> that fingerprints the batch; call again with the token, and
+if anything drifted in between, nothing is applied. Each write lands in the same audit table
+with source <code>mcp</code>. Whether it is switched on in production is an ops decision
+recorded in the repo's <code>prod-ops</code> skill; check there rather than assume.</p>
+
+<!-- ================================================================ -->
+<h2><span class="n">9</span> Box 5 · UI: the React app</h2>
+
+<p>React will be new; for now you only need its shape.<sup><a href="#r12">12</a></sup></p>
+<ul>
+  <li><strong>Routes</strong> are declared in <code>frontend/src/App.tsx:123-155</code>, one per
+  file in <code>pages/</code>, all wrapped in <code>ProtectedRoute</code> (signed in? has a
+  role? a reader on an allowed page?) and <code>Layout</code> (the sidebar).</li>
+  <li><strong>The menu</strong> is <code>navGroups</code> in
+  <code>components/Layout.tsx:626</code>: Dashboard; Operations (Replenishment, Transfers,
+  Inbound, Compliance); Merch planning (Factory Buy, Range, Alerts, Out of Stock, Overstock,
+  Stock Review, All SKUs); Analysis (Velocity, Amazon Stock Gap, FBA/FBM, Product Perf, YoY);
+  Settings. The same file holds the user-facing <code>CHANGELOG</code>, whose first entry is the
+  version shown in the sidebar.</li>
+  <li><strong>Data</strong>: each page keeps its own state and fetches in a
+  <code>useEffect</code> with <code>market</code> in its dependency list, so switching market
+  refetches. No data-fetching library.</li>
+  <li><strong>The client</strong> (<code>api/client.ts</code>) adds <code>?market=</code>, the
+  Bearer token, a single retry on 401, and a toast on any failed save.</li>
+  <li><strong>Types</strong> in <code>types/index.ts</code> are hand-copied from the backend
+  schemas. No code generation, so a new field is two edits.</li>
+</ul>
+<div class="callout">
+  <span class="lbl">Python bridge</span>
+  <p>Read a page as a function that returns HTML, re-run whenever its state changes.
+  <code>useState</code> is a variable that triggers that re-run when set; <code>useEffect(fn,
+  [market])</code> is "run <code>fn</code> after rendering, and again whenever
+  <code>market</code> changes", like a callback keyed on a parameter. Lesson 8 takes one page
+  apart line by line.</p>
+</div>
+
+<!-- ================================================================ -->
+<h2><span class="n">10</span> Who can see what, and where: auth, roles, five markets</h2>
+
+<p><strong>Sign-in.</strong> The SPA signs in with Microsoft Entra ID through
+<code>@azure/msal-browser</code> and sends the ID token as a Bearer token. The backend
+validates it against Entra's published keys (<code>middleware/auth.py</code>). The first time
+someone from LTD signs in, they are created as a <strong>reader on every market</strong>.<sup><a href="#r13">13</a></sup></p>
+
+<table class="ref">
+  <thead><tr><th>Role</th><th>Designed to</th></tr></thead>
+  <tbody>
+    <tr><td class="file wrap">admin</td><td>Everything, including users, sync, FBA config, promos and status configs.</td></tr>
+    <tr><td class="file wrap">planner</td><td>Every page; the writes: orders, range, statuses, adjustments, compliance cases.</td></tr>
+    <tr><td class="file wrap">viewer</td><td>Every page except Overstock and Settings; no writes.</td></tr>
+    <tr><td class="file wrap">reader</td><td>GET only, and only the endpoints behind Dashboard, All SKUs, Product Perf, YoY, Velocity, Range and Out of Stock. Enforced in the backend for every router: <code>get_current_user</code> calls <code>_enforce_reader_scope</code> against <code>READER_ALLOWED_PATHS</code> (<code>auth.py:24-45</code>).</td></tr>
+    <tr><td class="file wrap">is_approver</td><td>A flag, not a role: may tick lines, approve and unlock the weekly order.</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Markets.</strong> <code>users.markets</code> is a list. The
+<code>get_market_param</code> dependency takes <code>?market=</code> (or the user's first
+market), refuses a market the user doesn't hold (403) or that doesn't exist (400), and hands
+the handler a clean market code. Every table holds every market; services filter by country,
+location or a market column, and every service function defaults to
+<code>market="US"</code>, so a call that forgets <code>market=market</code> quietly computes
+US.</p>
+
+<p>Five markets, each a block in <code>services/market_config.py:60-219</code>, the file that
+holds every location, route and transit time:<sup><a href="#r14">14</a></sup></p>
+<table class="ref">
+  <thead><tr><th>Market</th><th>Since</th><th>Hub (receives POs)</th><th>Other locations</th><th>Routes</th></tr></thead>
+  <tbody>
+    <tr><td><strong>US</strong></td><td>origin</td><td>Riverside 124</td><td>Chicago 135 · Amazon 98 · Walmart 127</td><td>transfer Riverside → Chicago; replenish Riverside → Amazon FBA (3 wk)</td></tr>
+    <tr><td><strong>AU</strong></td><td>Jun 2026</td><td>Sydney LBO 4</td><td>Sydney LB 5 · AU Amazon 92 · The Iconic 121</td><td>LBO ↔ LB; LBO → Amazon AU; LB → The Iconic</td></tr>
+    <tr><td><strong>UK</strong></td><td>14 Oct 2026</td><td>UK E-Com 65</td><td>Backstock 104 · NuOrder 105 · Amazon 66</td><td>E-Com → NuOrder; E-Com → Amazon UK</td></tr>
+    <tr><td><strong>EU</strong></td><td>14 Oct 2026</td><td>EU E-Com 86</td><td>Backstock 107 · NuOrder 108 · Amazon 87</td><td>E-Com → NuOrder; E-Com → Amazon EU</td></tr>
+    <tr><td><strong>CA</strong></td><td>5 Nov 2026</td><td>CA NAFG 110</td><td>CA Amazon 125</td><td>NAFG → Amazon CA only (no Transfers page)</td></tr>
+  </tbody>
+</table>
+<p>US is the reference market; the others are wired to different depths (UK and EU have no
+range calls or inbound shipping data yet; CA is Amazon-only). When something works in US and
+not elsewhere, suspect a missing <code>market=market</code> or a market-specific gap before
+anything exotic.</p>
+
+<!-- ================================================================ -->
+<h2><span class="n">11</span> How a change reaches production</h2>
+
+<div class="pipe">
+  <span class="st">push to <code>main</code></span><span class="to"></span>
+  <span class="st">Bitbucket Pipelines<small>docker build (SPA + Python)</small></span><span class="to"></span>
+  <span class="st">ECR<small>tagged commit SHA + latest</small></span><span class="to"></span>
+  <span class="st">SSM send-command<small>scripts/deploy.sh</small></span><span class="to"></span>
+  <span class="st">compose up -d<small>on the host</small></span><span class="to"></span>
+  <span class="st key">migrate → seed → serve</span>
+</div>
+<p>About 3–5 minutes from push to live, with a short outage while the container restarts and
+runs Alembic.<sup><a href="#r15">15</a></sup> The pipeline builds and ships; it does not run
+Python checks. The gates are the ones you run before pushing, from the repo's
+<code>release</code> skill:</p>
+<ol>
+  <li>A user-facing entry at the top of <code>CHANGELOG</code> in <code>Layout.tsx</code>, and
+  the developer history in the root <code>CHANGELOG.md</code>.</li>
+  <li>For any projection, velocity or grading change: the
+  <a class="xref" href="../reference/glossary.html#harness">harness</a>
+  (<code>backend/app/tools/compare_projections.py</code> <code>dump</code> before and after,
+  then <code>compare</code>) and a <code>CALC_BASIS_VERSION</code> bump.</li>
+  <li><code>npx eslint src/ &amp;&amp; npm run build</code>; <code>python -m compileall -q app</code>;
+  a linear migration chain (check the head on <code>main</code> before numbering).</li>
+  <li>After deploy: recalculate the current weekly order; Sync Now if a Databricks-fed table or
+  a market was added.</li>
+</ol>
+<p>There are no git tags; the version of record is the sidebar CHANGELOG (2.26 today).
+Rollback is revert-and-push, or re-tag an older image as <code>latest</code> and
+<code>compose up</code>. Migrations only go forward in practice. Lesson 9 is the deploy.</p>
+
+<!-- ================================================================ -->
+<h2><span class="n">12</span> Where would the bug live?</h2>
+<table class="ref">
+  <thead><tr><th>Symptom</th><th>Box</th><th>Open first</th></tr></thead>
+  <tbody>
+    <tr><td>A step is red in Settings, or data looks a day old</td><td>1 Sync</td><td class="file wrap">sync_log (Settings) → that step in databricks_sync.py</td></tr>
+    <tr><td>A cover or quantity looks wrong</td><td>3 Engine</td><td class="file wrap">the page's service → demand / inbound_grading / opening stock</td></tr>
+    <tr><td>Numbers didn't change after a data fix or a rule change</td><td>4 API (cache)</td><td class="file wrap">services/cache.py: cleared since? CALC_BASIS_VERSION bumped?</td></tr>
+    <tr><td>A range call or status "reverted"</td><td>2 Store (record)</td><td class="file wrap">sku_range row: status_manual, updated_by/at</td></tr>
+    <tr><td>Works in US, empty in another market</td><td>3 Engine / config</td><td class="file wrap">market=market on every call; market_config.py</td></tr>
+    <tr><td>A field is in the JSON but not on the page</td><td>5 UI</td><td class="file wrap">frontend/src/types/index.ts → the page</td></tr>
+    <tr><td>A field is computed but missing from the JSON</td><td>4 API</td><td class="file wrap">backend/app/schemas/</td></tr>
+    <tr><td>Someone gets 403</td><td>4 API (auth)</td><td class="file wrap">middleware/auth.py: role, reader scope, user.markets</td></tr>
+    <tr><td>Pipeline green, app returns 502/500</td><td>Infra</td><td class="file wrap">container logs over SSM: alembic, seed, import errors</td></tr>
+  </tbody>
+</table>
+
+<!-- ============ PRACTICE (widgets from ../assets/quiz.js) ============ -->
+<h2><span class="n">13</span> Practice: make it stick</h2>
+<p class="sans" style="color:var(--muted); font-size:.9rem;">Answer from memory; feedback is
+instant. Then do Exercise F on paper.</p>
+
+<div class="ex">
+  <span class="tasklbl">Exercise A · Retrieval</span>
+  <h3>Which box does each path belong to?</h3>
+  <p class="hint">Sync · Store · Engine · API · UI · Infra.</p>
+  <div class="qz-classify qz-wide" data-options="Sync|Store|Engine|API|UI|Infra">
+    <div class="qz-item" data-op="backend/app/services/databricks_sync.py"   data-answer="Sync"   data-why="The whole dwh → Postgres pull, steps and orchestrators, lives in this one file."></div>
+    <div class="qz-item" data-op="backend/alembic/versions/056_demand_adjustments.py" data-answer="Store" data-why="Migrations define the Postgres schema and run on every container start."></div>
+    <div class="qz-item" data-op="backend/app/services/demand.py"           data-answer="Engine" data-why="Builds the DemandSeries, one of the primitive's three inputs."></div>
+    <div class="qz-item" data-op="backend/app/mcp/tools.py"                  data-answer="API"    data-why="The MCP front door: tools that call the same services as REST."></div>
+    <div class="qz-item" data-op="backend/app/middleware/auth.py"            data-answer="API"    data-why="Token validation, reader scope and get_market_param: the API's gatekeeper."></div>
+    <div class="qz-item" data-op="backend/app/models/sku_range.py"           data-answer="Store"  data-why="The model for the record DreamCast owns: ranging, statuses, seller SKU, case pack."></div>
+    <div class="qz-item" data-op="backend/app/services/factory_buy_rules.py" data-answer="Engine" data-why="A review-rule module: flags lines, never moves a quantity."></div>
+    <div class="qz-item" data-op="frontend/src/api/client.ts"                data-answer="UI"     data-why="The browser-side client: adds ?market=, the Bearer token, retries and toasts."></div>
+    <div class="qz-item" data-op="scripts/deploy.sh"                         data-answer="Infra"  data-why="SSM send-command: pull the image and compose up on the host."></div>
+    <div class="qz-item" data-op="backend/app/services/cache.py"             data-answer="API"    data-why="The response cache and CALC_BASIS_VERSION: what handlers return when nothing is recomputed."></div>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise B · A maintainer's day</span>
+  <h3>This morning's sync failed at step 14, <code>inbound_shipments</code>. A planner says the
+  Dashboard looks exactly like yesterday, but a SKU she opened in Velocity shows today's stock.
+  Why do the two pages disagree?</h3>
+  <div class="qz-reveal" data-answer="2">
+    <div class="qz-choices">
+      <button data-v="0">Velocity reads Databricks on request</button>
+      <button data-v="1">Dashboard only refreshes at 20:00</button>
+      <button data-v="2">The cache was never invalidated</button>
+      <button data-v="3">Step 14 rolled tables back</button>
+    </div>
+    <div class="qz-explain">
+      <strong>The cache was never invalidated.</strong> Step 14 is an abort step, so the
+      orchestrator stopped before <code>invalidate_cache()</code> and the warm-up. Dashboard
+      (<code>/stock-cover</code>) serves its cached payload from the last good run. Velocity's
+      detail endpoints are uncached, so they recompute from tables that steps 1–13 already
+      refreshed: mixed-age data. Nothing reads Databricks at request time, and there is no
+      rollback. First move: the step's error in Settings, then
+      <code>sync_inbound_shipments</code> in <code>databricks_sync.py</code>.
+    </div>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise C · A maintainer's day</span>
+  <h3>A planner set a SKU's Amazon FBA range call to "no" in DreamCast last week. Merch's file,
+  synced every run, still says "yes". Which table decides what the replenishment engine does?</h3>
+  <div class="qz-reveal" data-answer="1">
+    <div class="qz-choices">
+      <button data-v="0">sku_market_status</button>
+      <button data-v="1">sku_range</button>
+      <button data-v="2">amazon_range</button>
+      <button data-v="3">best_seller_sku_status</button>
+    </div>
+    <div class="qz-explain">
+      <strong><code>sku_range</code></strong>, the record DreamCast owns. The merch file is
+      mirrored into <code>sku_market_status</code> and only seeds <code>sku_range</code> where a
+      call is still undecided: the file seeds, a decision wins. <code>amazon_range</code> is a
+      dead table kept for history, and <code>dwh.merch.best_seller_sku_status</code> is the
+      source of the mirror, not something the engine reads.
+    </div>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise D · A maintainer's day</span>
+  <h3>A bad PO row came through from NetSuite, and you corrected it with SQL in the prod
+  database over SSM. An hour later the Dashboard still shows the cover computed from the bad
+  row. Click the fix.</h3>
+  <div class="qz-pick" data-wrong="✗ Not that one. The table is already right; ask what the handler is returning instead of recomputing.">
+    <span class="qz-line" data-correct="false">bump the CHANGELOG version, then redeploy everything</span>
+    <span class="qz-line" data-correct="false">re-run alembic upgrade head inside the container</span>
+    <span class="qz-line" data-correct="true"
+          data-feedback="✓ The response cache lives in the app process's memory with no TTL, and a SQL edit never touches it. Restart the container (or run Sync Now, which ends by invalidating and re-warming). Better still: fix it upstream in dwh so the next sync doesn't bring the bad row back.">restart the app container to clear memory</span>
+    <span class="qz-line" data-correct="false">edit frontend types to match the row</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise E · A maintainer's day</span>
+  <h3>The pipeline went green, but the site returns 502 and never recovers. What runs first when
+  the new container starts, and so is the first suspect?</h3>
+  <div class="qz-reveal" data-answer="0">
+    <div class="qz-choices">
+      <button data-v="0">alembic upgrade head</button>
+      <button data-v="1">python -m app.seed</button>
+      <button data-v="2">uvicorn app.main:app</button>
+      <button data-v="3">the scheduled sync</button>
+    </div>
+    <div class="qz-explain">
+      <strong><code>alembic upgrade head</code></strong>. The start command is
+      <code>alembic upgrade head &amp;&amp; python -m app.seed &amp;&amp; uvicorn …</code>
+      (<code>Dockerfile:36</code>), so a failing migration stops the chain before the web server
+      ever starts, then the seed, then an import error in uvicorn. The pipeline can't catch any
+      of these: it builds the image, it doesn't run it. Read the container logs over SSM.
+    </div>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tasklbl">Exercise F · Draw it from memory</span>
+  <h3>On paper: draw the five boxes with Infra around them, then the Riverside trace from the
+  bar down to <code>dwh</code>. Then check one hop: what does inbound grading read
+  <em>first</em>?</h3>
+  <div class="qz-reveal" data-answer="3">
+    <div class="qz-choices">
+      <button data-v="0">open_purchase_orders</button>
+      <button data-v="1">amazon_fba_inbound</button>
+      <button data-v="2">transfer_orders</button>
+      <button data-v="3">inbound_shipment_po</button>
+    </div>
+    <div class="qz-explain">
+      <strong><code>inbound_shipment_po</code></strong>, the shipping master
+      (<code>dwh.shipping.master_ns_jas_inbound_shipment_pos</code>), first source since v2.18.
+      Open POs count only where the master doesn't describe them; <code>amazon_fba_inbound</code>
+      is retired. The full chain:
+      <br><code>Dashboard.tsx</code> bar → <code>fetchStockCover</code> →
+      <code>GET /api/dashboard/stock-cover?market=US</code> → <code>get_current_user</code> +
+      <code>get_market_param</code> → cache hit? → <code>get_batch_seasonal_woc</code> →
+      <code>_cover_for</code> → <code>project(…, early_arrivals="credit")</code> →
+      <code>weeks_of_cover(cap=52)</code>
+      <br>inputs: opening = <code>inventory_levels</code> · demand = hub → all channels →
+      <code>daily_sales</code> ← step 1 ← <code>gold_netsuite_daily_sales_by_customer</code> ·
+      arrivals = shipping master, then POs, Amazon shipment lots, TOs.
+      <br><br>Missed a hop? That's the one to rehearse before Lesson 2.
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">14</span> Where this takes you</h2>
+<ul>
+  <li><strong>Lesson 2</strong> opens <code>projection.py</code> and hand-simulates a
+  projection with synthetic numbers, one reading at a time.</li>
+  <li><strong>Lessons 3–5</strong> take the three inputs (demand twice, because it is where
+  most rules now live; then inbound grading), the places almost every "wrong number" ends up.</li>
+  <li>The full plan is in the workspace's <code>NOTES.md</code>.</li>
+</ul>
+
+<div class="callout">
+  <span class="lbl">Primary source: read this next</span>
+  <p>The repo's own map, in the order its author intends: the root <code>CLAUDE.md</code> (5 KB;
+  the routing table to the per-directory <code>CLAUDE.md</code> files and the rules that apply
+  everywhere), then <code>forecast-calculations.md</code> "The shared model" and "Markets and
+  warehouses" (<code>:8-78</code>). About 20 minutes.<sup><a href="#r1">1</a></sup><sup><a href="#r16">16</a></sup>
+  If you have 15 more, read "Why" in <code>PROJECTION-ALIGNMENT-PLAN.md</code>: why the code is
+  shaped around one primitive, in Matt's words.</p>
+</div>
+
+<div class="callout">
+  <span class="lbl">Your teacher is one message away</span>
+  <p>I can open the repo with you. If any hop is fuzzy ("what's in
+  <code>StockCoverResponse</code>?", "show me the UK version of the trace", "what does the
+  warm-up actually compute?"), ask in the chat. What confuses you sets the pace of Lesson 2.</p>
+</div>
+
+<div class="refs">
+  <strong>References</strong> <span class="sans" style="color:var(--muted); font-size:.85rem;">(repo
+  paths relative to <code>warehouse-forecast-app/</code> at <code>380ff8f</code>, v2.26)</span>
+  <ol>
+    <li id="r1"><code>CLAUDE.md</code> (root): what DreamCast is and the names that kept the old
+      one (<code>:3-5</code>), the routing table to the per-directory docs, rules, markets, versioning.</li>
+    <li id="r2"><code>backend/app/models/CLAUDE.md</code> (every table, dead ones listed);
+      <code>backend/app/services/sku_range.py</code> <code>seed_from_file</code> (<code>:262</code>),
+      <code>seed_status_from_file</code> (<code>:247</code>).</li>
+    <li id="r3"><code>Dockerfile</code> (<code>:36</code> start command); <code>docker-compose.yml</code>;
+      <code>backend/CLAUDE.md</code> (scheduler, SPA serving, cache, local testing);
+      <code>.claude/skills/prod-ops/SKILL.md</code> and <code>.claude/skills/test-branch-stack/SKILL.md</code>.</li>
+    <li id="r4"><code>backend/app/main.py</code>: lifespan, reaper and scheduler <code>:21-50</code>
+      (cron <code>:40-41</code>); routers <code>:91-94</code>; MCP route <code>:106-114</code>;
+      SPA serving <code>:117-131</code>. APScheduler 3.x user guide:
+      <a href="https://apscheduler.readthedocs.io/en/3.x/userguide.html">apscheduler.readthedocs.io</a>.</li>
+    <li id="r5"><code>backend/app/services/databricks_sync.py</code>: <code>warm_up_cluster</code>
+      <code>:76</code>, <code>sync_daily_sales</code> <code>:157</code>,
+      <code>sync_inbound_shipments</code> <code>:1764</code>, <code>run_incremental_sync</code>
+      <code>:2150-2218</code>; <code>backend/app/routers/sync.py</code> <code>SYNC_STEPS</code>
+      <code>:30</code>, <code>/last</code> <code>:68-81</code>, <code>/trigger</code> <code>:84</code>.</li>
+    <li id="r6"><code>backend/app/models/</code>; <code>backend/alembic/versions/</code> (head
+      <code>056_demand_adjustments</code>).</li>
+    <li id="r7"><code>backend/app/services/projection.py</code>: docstring <code>:1-34</code>,
+      readings <code>:168-238</code>, <code>project</code> <code>:241-289</code>. Unchanged since
+      <code>0b134ca</code> (1 Oct 2026). <code>PROJECTION-ALIGNMENT-PLAN.md</code> "Why".</li>
+    <li id="r8"><code>frontend/src/pages/Dashboard.tsx</code> <code>:80-98</code>,
+      <code>:366-403</code>; <code>frontend/src/api/dashboard.ts</code> <code>:33-36</code>;
+      <code>frontend/src/api/client.ts</code> <code>:32-64</code>;
+      <code>backend/app/routers/dashboard.py</code> <code>:105-116</code>;
+      <code>services/warehouse_velocity.py</code> <code>:310-449</code>;
+      <code>services/demand.py</code> <code>:1059-1082</code>, <code>:1140</code>;
+      <code>services/inbound_grading.py</code> <code>:335</code>, <code>:418</code>, <code>:528</code>.</li>
+    <li id="r9"><code>frontend/src/api/dashboard.ts</code> <code>:298-299</code>;
+      <code>backend/app/routers/dashboard.py</code> <code>:1307</code>;
+      <code>backend/app/services/replenishment_orders.py</code> <code>adjust_item</code>
+      <code>:458</code>, <code>export_amazon_order_files</code> <code>:1008</code>;
+      <code>services/order_events.py</code>; <code>backend/app/routers/CLAUDE.md</code> (order stages).</li>
+    <li id="r10">FastAPI: Bigger Applications, Multiple Files (the <code>APIRouter</code> pattern).
+      <a href="https://fastapi.tiangolo.com/tutorial/bigger-applications/">fastapi.tiangolo.com</a>;
+      <code>backend/app/routers/CLAUDE.md</code>; <code>backend/app/services/cache.py</code>
+      (<code>:20</code>, <code>:39-50</code>).</li>
+    <li id="r11"><code>backend/app/mcp/server.py</code>, <code>tools.py</code>;
+      <code>replenishment_orders.preview_line_changes</code> <code>:706</code>,
+      <code>apply_line_changes</code> <code>:800</code>; <code>MCP-PLAN.md</code>;
+      <code>backend/CLAUDE.md</code> "MCP".</li>
+    <li id="r12"><code>frontend/src/App.tsx</code> <code>:66-155</code>;
+      <code>frontend/src/components/Layout.tsx</code> <code>:626-653</code>;
+      <code>frontend/CLAUDE.md</code>. React "Learn":
+      <a href="https://react.dev/learn">react.dev/learn</a>.</li>
+    <li id="r13"><code>backend/app/middleware/auth.py</code>: <code>READER_ALLOWED_PATHS</code>
+      <code>:24-38</code>, <code>_enforce_reader_scope</code> <code>:41-45</code>,
+      <code>get_current_user</code> <code>:170-177</code>, <code>get_market_param</code>
+      <code>:216-229</code>; <code>backend/app/routers/admin.py</code> <code>VALID_ROLES</code>
+      <code>:70</code>; <code>backend/app/services/order_permissions.py</code>. MSAL.js:
+      <a href="https://learn.microsoft.com/entra/identity-platform/msal-overview">learn.microsoft.com</a>.</li>
+    <li id="r14"><code>backend/app/services/market_config.py</code> <code>:60-219</code>;
+      <code>forecast-calculations.md</code> "Markets and warehouses" (<code>:26-78</code>).</li>
+    <li id="r15"><code>bitbucket-pipelines.yml</code>; <code>scripts/deploy.sh</code>;
+      <code>.claude/skills/release/SKILL.md</code>, <code>.claude/skills/projection-harness/SKILL.md</code>;
+      <code>CHANGELOG.md</code>.</li>
+    <li id="r16"><code>forecast-calculations.md</code> "The shared model" (<code>:8-25</code>).</li>
+  </ol>
+  See also the <a href="../reference/architecture-map.html">Architecture Map</a>, the
+  <a href="../reference/glossary.html">Glossary</a>, and <code>RESOURCES.md</code>.
+</div>
+
+<div class="nav">
+  <a href="../reference/glossary.html">← Glossary</a>
+  <span class="sans" style="color:var(--muted); font-size:.85rem;">Next: Lesson 2, Reading
+  <code>projection.py</code> (coming soon)</span>
+  <a href="../reference/architecture-map.html">Architecture Map (print it) →</a>
+</div>
+
+</div>
+<script src="../assets/quiz.js"></script>
+</body>
+</html>

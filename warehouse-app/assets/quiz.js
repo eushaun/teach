@@ -15,6 +15,7 @@
       • data-answer  : must equal one option exactly
       • data-why     : feedback shown after a click (✓/✗ auto-prefixed)
       A running "<n> / <total> correct" score is appended automatically.
+      Add class "qz-wide" to the grid for 5+ options or long items (buttons wrap).
 
    2) PICK — click the one correct line in a code block.
       <div class="qz-pick" data-wrong="✗ optional custom wrong-answer text">

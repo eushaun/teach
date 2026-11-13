@@ -17,6 +17,11 @@
 
 /* ---- .qz-classify ---- */
 .qz-classify{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:.7rem;}
+/* .qz-wide: for 5+ options or long items (file paths); buttons wrap */
+.qz-classify.qz-wide{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));}
+.qz-classify.qz-wide .qz-item .btns{flex-wrap:wrap;}
+.qz-classify.qz-wide .qz-item button{flex:1 0 auto; padding:.32rem .5rem;}
+.qz-classify.qz-wide .qz-item .op{word-break:break-all;}
 .qz-item{border:1px solid var(--rule); border-radius:9px; padding:.6rem .7rem; background:#fdfcf9;}
 .qz-item .op{font-family:var(--mono); font-size:.82rem; font-weight:700; margin-bottom:.45rem;}
 .qz-item .btns{display:flex; gap:.35rem;}

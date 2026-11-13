@@ -1,9 +1,9 @@
-# Mission: Own the Warehouse Forecast App
+# Mission: Own DreamCast (the warehouse forecast app)
 
 ## The one-liner
-Understand Matt's `warehouse-forecast-app` well enough to maintain it, debug it in
-production, and ship changes end-to-end (daily Databricks→Postgres sync → FastAPI backend →
-React frontend → EC2 deploy) with confidence.
+Understand Matt's DreamCast (repo `warehouse-forecast-app`) well enough to maintain it, debug
+it in production, and ship changes end-to-end (twice-daily Databricks→Postgres sync → FastAPI
+engines → React frontend → EC2 deploy) with confidence.
 
 ## Who I am
 - **Role:** Data engineer at Love to Dream. I own the Databricks `dwh` warehouse this app
@@ -32,16 +32,21 @@ React frontend → EC2 deploy) with confidence.
 - I can run the projection harness and interpret its output.
 - I can deploy, and roll back.
 - I can read and modify Matt's React/TypeScript pages.
-- I can explain each forecasting algorithm and its parameters: weeks-of-cover, stock alerts,
-  warehouse transfers, Amazon FBA / Iconic replenishment, factory buys, compliance holds.
+- I can explain each engine and its parameters: weeks-of-cover, the demand series and its
+  rules, inbound grading, stock alerts, warehouse transfers, Amazon FBA / Iconic replenishment
+  and the weekly order workflow, factory buys, compliance holds, ranging.
 
 ## Constraints & context
-- Every specimen comes from the real repo (`C:\Users\ShaunLim\repos\warehouse-forecast-app`).
+- Every specimen comes from the real repo (`/home/eushaun/repos/warehouse-forecast-app` on the
+  WSL machine; a separate Windows clone exists).
+- Since v2.22 DreamCast is also the record for ranging and SKU statuses (`sku_range`), and
+  Databricks is due to read it back, so data now flows both ways between the app and `dwh`.
 - TypeScript/React taught just-in-time, bridging from the `typescript/` workspace.
 - Lessons short + interactive (house default).
 - **Privacy:** this is an internal company codebase. The workspace is published (2026-10-04),
-  but the unredacted briefing and `PRIVATE-NOTES.md` stay gitignored. Public files never carry
-  hostnames, account IDs, internal NetSuite entity IDs or real stock/sales figures (synthetic only).
+  but the unredacted briefings and `PRIVATE-NOTES.md` stay gitignored. Public files never carry
+  hostnames, account or instance IDs, NetSuite entity IDs, security gaps or real stock/sales
+  figures (synthetic only). See `NOTES.md` for the full list.
 
 ## Out of scope (for now)
 - Rewriting or re-architecting the app.
@@ -50,4 +55,6 @@ React frontend → EC2 deploy) with confidence.
 
 ## Status
 - **Mission set:** 2026-10-03
+- **Rebuilt against v2.26:** 2026-11-13 (app renamed DreamCast; five markets; the app now owns
+  records). The mission itself is unchanged. See `learning-records/0003-*`.
 - See `learning-records/` for how this mission evolves.
